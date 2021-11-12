@@ -1,0 +1,33 @@
+---
+paths:
+  grid_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  input_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/InputData419.mat"
+  multiple_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/"
+  py_interpreter: '/Users/pietrorandomazzarino/Environments/Collab_Teleriscaldamento/bin/python'
+
+#scenario with dist grid replica
+num_Grids: 1
+
+#scenario with actual data decomment if using
+#num_Grids: None
+
+#properties
+properties:
+  cpw: 4186
+  rhow: 1000
+  branches:
+    Ctube: True
+    cpste: 461
+    rhste: 7850 # must be multiplied
+  T_utenza_init: 350.1500
+
+#simulation
+START: '2013-05-11T21:23:58.970460+07:00' #utc format or arrow getable format
+END: '2013-05-11T21:23:58.970460+07:00' #utc format or arrow getable format
+TS_SIZE: 300    #in seconds
+DURATION: 4  # 432 in number of timesteps
+
+#aiomas
+HOST: "localhost"
+PORT: 5780
+codec: None # dont know how to use this
