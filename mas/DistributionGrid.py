@@ -1,5 +1,8 @@
 import aiomas
 import asyncio
+import numpy as np
+import networkx as nx
+from pyvis.network import Network
 
 
 class DistGrid(aiomas.Agent):
@@ -14,7 +17,14 @@ class DistGrid(aiomas.Agent):
         self.inputdata= inputdata
         self.properties = properties
         self.ts_size = ts_size
+        #graph testing
+        self.graph = self.incidence2graph()
+        #dir=nx.is_directed(self.graph)
 
+
+
+
+        self.node_attr = {}
         #children agents
         self.substations = []
         self.subs_names = []
@@ -37,7 +47,11 @@ class DistGrid(aiomas.Agent):
         print('Created Dist Grid Agent : %s'%name)
         await grid.create_substations()
         await grid.create_utenze()
-
+        nx.set_node_attributes(grid.graph, grid.node_attr)
+        net = Network()
+        net.from_nx(grid.graph)
+        net.show_buttons()
+        net.show('data/grid.html')
         return grid
 
     async def create_substations(self):
@@ -49,6 +63,8 @@ class DistGrid(aiomas.Agent):
                 'mas.Sottostazione:Sottostazione.create', name, sid, self.netdata, self.inputdata, self.properties, self.ts_size)
             proxy = await self.container.connect(address)
             self.substations.append((proxy, address))
+            self.node_attr[sid] = {}
+            self.node_attr[sid]['name'] = name
 
 
     async def create_utenze(self):
@@ -60,8 +76,8 @@ class DistGrid(aiomas.Agent):
                 'mas.Utenza:Utenza.create', name, uid, self.netdata, self.inputdata, self.properties, self.ts_size)
             #proxy = await self.container.connect(address)
             self.utenze.append((proxy, address))
-
-
+            self.node_attr[uid] = {}
+            self.node_attr[uid]['name'] = name
 
     @aiomas.expose
     async def step (self):
@@ -89,6 +105,7 @@ class DistGrid(aiomas.Agent):
 
     def generate_matrices(self,dir):
         if dir == 'mandata':
+            pass
 
         else:
 
@@ -96,4 +113,17 @@ class DistGrid(aiomas.Agent):
     def calc_temperatures(self):
         #M K f vanno tirate fuori in generate matrices
         #T = (M + K)\(f + M * T);
-        return T
+        return #T
+
+    def incidence2graph(self):
+        #am = (np.dot(self.netdata['A'], self.netdata['A'].T) != 0).astype(int)
+        #am = (np.dot(self.netdata['A'], self.netdata['A'].T)).astype(int)
+        #np.fill_diagonal(am, 0)
+        Ad = np.zeros( [self.netdata['A'].shape[0], self.netdata['A'].shape[0]], dtype=int)
+        for column in self.netdata['A'].T:
+            i = np.where(column > 0)
+            j = np.where(column < 0)
+            Ad[i, j] = 1
+        graph = nx.from_numpy_array(Ad, create_using=nx.DiGraph)
+        return graph
+

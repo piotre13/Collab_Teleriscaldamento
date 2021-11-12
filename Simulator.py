@@ -2,6 +2,7 @@ import aiomas
 import asyncio
 from mas import util
 import multiprocessing
+import sys
 
 class Simulator():
 
@@ -94,19 +95,8 @@ class Simulator():
 
             # ********** REPORTING CONDITION EVERY 24 H
             if self.clock.time() % (86400) == 0: # these are the second in a day
-                # make reporting for safety every 24 h of simulation
-                print('REPORTING DATA OF THE DAY.\n')
-                # saving the tsd in csv files for each building
-                try:
-                    futs = [self.buildings[name][0].reporting24() for name in self.buildings]
-                    await asyncio.gather(*futs)
-                    # saving the dso reports every 24 h
-                    await dso_pro.reporting24()
-                except Exception as e:
-                    await self.finalize()
-                    print('inside the LOOP >>> reporting phase!')
-                    print(e)
-                    return (print('simul ended!'))
+                pass
+
             self.cycle_done = asyncio.Future()  # ripristino il fUTURE
 
 
@@ -149,7 +139,7 @@ class Simulator():
             # NB the python path is the one of the environment
             #todo could use sys.executable for the python interpreter
             cmd = [
-                self.py_int,
+                sys.executable,
                 '-m', 'mas.container',
                 '--start-date=%s' % self.start_date,
                 '%s:%s' % addr,
