@@ -5,7 +5,7 @@ from pyvis.network import Network
 
 
 data = loadmat('NetData419.mat')
-len(data['A'])
+nn=len(data['A'])
 A = np.array(data['A'])
 Ad = np.zeros((len(data['A']),len(data['A'])),dtype=int)
 for column in A.T:

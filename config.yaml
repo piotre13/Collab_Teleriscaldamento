@@ -1,7 +1,7 @@
 ---
 paths:
-  grid_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
-  input_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/InputData419.mat"
+  grid_data: "/home/pietrorm/Documenti/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  input_data: "/home/pietrorm/Documenti/CODE/Collab_Teleriscaldamento/data/InputData419.mat"
   multiple_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/"
   py_interpreter: '/Users/pietrorandomazzarino/Environments/Collab_Teleriscaldamento/bin/python'
 
@@ -19,7 +19,10 @@ properties:
     Ctube: True
     cpste: 461
     rhste: 7850 # must be multiplied
-  T_utenza_init: 350.1500
+  init:
+    T_utenza_in: 353.1500
+    T_inf: 288.1500
+    TBC: 391.1500
 
 #simulation
 START: '2013-05-11T21:23:58.970460+07:00' #utc format or arrow getable format

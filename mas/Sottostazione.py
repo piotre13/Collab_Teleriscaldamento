@@ -54,6 +54,7 @@ class Sottostazione(aiomas.Agent):
 
     @aiomas.expose
     async def set_T(self,key,T):
+        print('setting T_in of sottostazione%s at time: %s'%(self.sid,str(self.container.clock.time()/self.ts_size)))
         self.T[key]=T
 
     @aiomas.expose

@@ -8,7 +8,8 @@ class Utenza(aiomas.Agent):
         #params
         self.name = name
         self.uid = uid #the node number in the whole grid
-        self.index = np.where(netdata['UserNode']== uid) # the index of the node in the UserNode vector and Gdata and P_req
+        self.index = np.where(netdata['UserNode']== uid)# the index of the node in the UserNode vector and Gdata and P_req
+        #nb self.index to be used in indata while sel.uid to be used in netdata in the grid
 
         #data
         self.netdata = netdata
@@ -60,13 +61,13 @@ class Utenza(aiomas.Agent):
     def calc_G(self,key):
         '''here we only read a csv but in future could be present a model to evaluate the requested G'''
         if key == 'G_in':
-            row = self.index # the ith utenza #TODO CHECK VERY WEEL  the difference between id in the whole grid and utenze ordered id
+            row = self.index # the ith utenza
             column = divmod(self.container.clock.time(), self.ts_size)[0]# the jth timestep
-            G = float(self.inputdata['Gdata'][column, row])
+            G = self.inputdata['Gdata'][row,column][0] #TODO CHECK if must be converted to floas of it could be used as array
             #update the state G
             self.G['G_in'] = G
         elif key == 'G_out':
-            #with no mass loss should be equal at G_in
+            #with no mass loss should be equal at G_in #todo
             pass
 
     def calc_P(self,key):
@@ -89,9 +90,12 @@ class Utenza(aiomas.Agent):
 
 
     @aiomas.expose
-    async def get_G(self, key,ts):
-
-        return self.history['G'][key][ts]
+    async def get_G(self, key, ts=None):
+        if not ts:
+            self.calc_G(key)
+            return (self.uid ,self.G[key])
+        else:
+            return (self.uid,self.history['G'][key][ts])
 
     @aiomas.expose
     async def get_T(self, key,ts):
@@ -103,7 +107,7 @@ class Utenza(aiomas.Agent):
 
     @aiomas.expose
     async def set_T(self,key, T):
-        print('setting T_in at time: %s'%str(self.container.clock.time()/self.ts_size))
+        print('setting T_in of utenza%s at time: %s'%(self.uid,str(self.container.clock.time()/self.ts_size)))
         self.T[key] = T
 
     @aiomas.expose
