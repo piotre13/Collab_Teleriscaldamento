@@ -2,6 +2,7 @@ import aiomas
 import asyncio
 import numpy as np
 import networkx as nx
+import math
 from pyvis.network import Network
 
 
@@ -15,7 +16,7 @@ class DistGrid(aiomas.Agent):
         #knowledge of the system
         self.netdata = netdata
         self.inputdata= inputdata
-        self.properties = properties
+        self.prop = properties
         self.ts_size = ts_size
         #todo preparare una funztioncina che all'inizio mi crea un po di variabili self utili
         #eg (NN, NB, L, D, D_ext
@@ -59,7 +60,7 @@ class DistGrid(aiomas.Agent):
             name = self.name+'_Sub_'+str(sid)
             self.subs_names.append(name)
             proxy, address = await self.container.agents.dict['0'].spawn(
-                'mas.Sottostazione:Sottostazione.create', name, sid, self.netdata, self.inputdata, self.properties, self.ts_size)
+                'mas.Sottostazione:Sottostazione.create', name, sid, self.netdata, self.inputdata, self.prop, self.ts_size)
             proxy = await self.container.connect(address)
             self.substations.append((proxy, address))
             self.node_attr[sid] = {}
@@ -72,7 +73,7 @@ class DistGrid(aiomas.Agent):
             name = self.name+'_Ut_'+str(uid)
             self.uts_names.append(name)
             proxy, address = await self.container.agents.dict['0'].spawn(
-                'mas.Utenza:Utenza.create', name, uid, self.netdata, self.inputdata, self.properties, self.ts_size)
+                'mas.Utenza:Utenza.create', name, uid, self.netdata, self.inputdata, self.prop, self.ts_size)
             #proxy = await self.container.connect(address)
             self.utenze.append((proxy, address))
             self.node_attr[uid] = {}
@@ -82,9 +83,9 @@ class DistGrid(aiomas.Agent):
     async def step (self):
         #INITIALIZATION AT FIRST TIMESTEP
         if (self.container.clock.time() / self.ts_size) == 0:
-            futs = [ut[0].set_T('T_in', self.properties['init']['T_utenza_in']) for ut in self.utenze]
+            futs = [ut[0].set_T('T_in', self.prop['init']['T_utenza_in']) for ut in self.utenze]
             await asyncio.gather(*futs)
-            futs = [sub[0].set_T('T_out', self.properties['init']['TBC']) for sub in self.substations]
+            futs = [sub[0].set_T('T_out', self.prop['init']['TBC']) for sub in self.substations]
             await asyncio.gather(*futs)
 
         #calcolo portate per istante t EQUAZIONE DI CONTINUITA'
@@ -92,8 +93,10 @@ class DistGrid(aiomas.Agent):
         G_ut = await asyncio.gather(*futs) #iterable of tuples with utenza_id and Portata in ingresso
         G_ext = self.create_Gext(G_ut) # vettore NNx1 con le portate di utenze e -sum(all) per TBC
         G = self.eq_continuità(G_ext)
-        print(G)
+        futs = [sub[0].get_T('T_out') for sub in self.substations]
+        TBC = await asyncio.gather(*futs)
 
+        K, f, M = self.create_matrices(G,G_ext,TBC,'mandata')
 
 
 
@@ -121,15 +124,72 @@ class DistGrid(aiomas.Agent):
         G[G<0]=G[G<0]*-1 #making it positive
         return G
 
-    def create_matrices(self,G,G_ext,dir):
+    def create_matrices(self,G,G_ext,T,dir):
+        NN,NB = self.netdata['A'].shape
+        L = self.netdata['L']
+        D = self.netdata['D']
+        D_ext = self.netdata['D_ext']
+        U = self.prop['U']
+        Tinf = self.prop['T_inf']
+        if self.prop['branches']['Ctube']:
+            cpste = self.prop['branches']['cpste']
+            rhste = self.prop['branches']['rhste']
+        else:
+            cpste = 0.0
+            rhste = 0.0
+
         if dir == 'mandata':
             nodi_immissione = self.netdata['BCT']
             nodi_estrazione = self.netdata['UserNode']
+            T_immissione = T
         elif dir == 'ritorno':
             nodi_immissione = self.netdata['UserNode']
             nodi_estrazione = self.netdata['BCT']
+            T_immissione= T
         else:
             raise ValueError ('Unknown direction!')
+        #init the matrices
+        K = np.zeros([NN,NN])
+        M_vec = np.zeros([NN,1])
+        f = np.zeros([NN,1])
+
+
+        for e in self.graph.edges():
+            #TODO finish here PD
+            M_vec[e[0]] = M_vec[e[0]] + self.prop['rhow']*self.prop['cpw']/self.ts_size * math.pi * D
+            M_vec[e[1]] = M_vec[e[1]] + self.prop['rhow']*self.prop['cpw']/self.ts_size * math.pi * D
+
+        for i in range(NN): #loop nodi
+            #nodi centrali
+            if i not in nodi_immissione and i not in nodi_estrazione:
+                out_edges = list(self.graph.out_edges(i)) # because directed returns only out edges
+                for ed in out_edges:
+                    l = L[self.graph.get_edge_data(*ed)['NB']]
+                    d = D[self.graph.get_edge_data(*ed)['NB']]
+
+                    K[i, i] = K[i, i] + ((l * math.pi * d * self.prop['U']) / 2)  # posizioni sulla diagonale
+
+                    f[i] = f[i] + ((l * math.pi * d * self.prop['U'] * self.prop['T_inf']) / 2) #vettore f per branches uscenti
+
+                    K[i,ed[1]] = - self.prop['cpw'] * G[self.graph.get_edge_data(*ed)['NB']] # posizioni (nodo entrante, nodo uscente)d
+                in_edges = list(self.graph.in_edges(i))
+                for ed in in_edges:
+                    l = L[self.graph.get_edge_data(*ed)['NB']]
+                    d = D[self.graph.get_edge_data(*ed)['NB']]
+
+                    K[i, i] = K[i, i] + self.prop['cpw'] * G[self.graph.get_edge_data(*ed)['NB']] +((l * math.pi * d * self.prop['U']) / 2)  # posizioni sulla diagonale
+
+                    f[i] = f[i] + ((l * math.pi * d * self.prop['U'] * self.prop['T_inf']) / 2)
+
+            #nodi estremi (imm ed estr)
+            else:
+                if i in nodi_immissione:
+                    pass
+                elif i in nodi_estrazione:
+                    pass
+
+        print(K)
+
 
 
     def calc_temperatures(self):
@@ -142,10 +202,20 @@ class DistGrid(aiomas.Agent):
         #am = (np.dot(self.netdata['A'], self.netdata['A'].T)).astype(int)
         #np.fill_diagonal(am, 0)
         Ad = np.zeros( [self.netdata['A'].shape[0], self.netdata['A'].shape[0]], dtype=int)
+        edge_attrs = {}
+        lenght = {'lenght': 0.0}
+        n = 0
         for column in self.netdata['A'].T:
             i = np.where(column > 0)
             j = np.where(column < 0)
-            Ad[i, j] = 1
+            #l = float(self.netdata['L'][n])
+            edge_attrs[(int(j[0]),int(i[0]))]= {'lenght': self.netdata['L'][n],
+                                                'D': self.netdata['D'][n],
+                                                'NB':n}
+            Ad[j, i] = 1
+            n+=1
         graph = nx.from_numpy_array(Ad, create_using=nx.DiGraph)
+        nx.set_edge_attributes(graph, edge_attrs)
+
         return graph
 

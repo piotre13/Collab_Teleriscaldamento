@@ -1,12 +1,12 @@
 ---
 paths:
-  grid_data: "/home/pietrorm/Documenti/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
-  input_data: "/home/pietrorm/Documenti/CODE/Collab_Teleriscaldamento/data/InputData419.mat"
+  grid_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  input_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/InputData419.mat"
   multiple_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/"
   py_interpreter: '/Users/pietrorandomazzarino/Environments/Collab_Teleriscaldamento/bin/python'
 
 #scenario with dist grid replica
-num_Grids: 1
+num_Grids: 6
 
 #scenario with actual data decomment if using
 #num_Grids: None
@@ -15,13 +15,17 @@ num_Grids: 1
 properties:
   cpw: 4186
   rhow: 1000
+  U: 1
+  T_inf: 288.1500
   branches:
     Ctube: True
     cpste: 461
     rhste: 7850 # must be multiplied
+    D_ext:
+      c1: 1.10025364222324
+      c2: 0.005506287389632
   init:
     T_utenza_in: 353.1500
-    T_inf: 288.1500
     TBC: 391.1500
 
 #simulation

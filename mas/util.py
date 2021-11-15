@@ -46,6 +46,7 @@ def read_data(path):
 		if not isinstance(dt, list):# here read integer such as BCT
 			dt-=1 # from matlab adaptation
 			data[key] = np.array([dt])
+
 		else: #here read list and matrices
 			if key == 'UserNode':
 				dt = [x - 1 for x in dt] #from matlab adaptation

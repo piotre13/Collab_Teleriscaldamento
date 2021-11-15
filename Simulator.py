@@ -121,6 +121,8 @@ class Simulator():
         else:
             #create replicates of grid
             netdata = util.read_data(self.paths['grid_data'])
+            # create D_ext
+            netdata['D_ext'] = netdata['D'] * self.properties['branches']['D_ext']['c1'] + 2 *  self.properties['branches']['D_ext']['c2']
             inputdata = util.read_data(self.paths['input_data'])
             for i in range (NUM):
                 await self.create_distGrid(i, netdata, inputdata)#TODO CREATION FROM DISTGRID --> SUBSTATIONS ---> UTENZE

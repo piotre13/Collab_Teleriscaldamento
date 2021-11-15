@@ -2,6 +2,7 @@ import aiomas
 import time
 import numpy as np
 
+#TODO APPEND TO HISTORY FIND THE BEST PLACE
 class Utenza(aiomas.Agent):
     def __init__(self, container, name, uid, netdata, inputdata, properties, ts_size):
         super().__init__(container)
@@ -85,6 +86,7 @@ class Utenza(aiomas.Agent):
     def calc_T(self):
         '''calculates the T_out function '''
         #here should use sel.P and self.G to calculate T or DT
+        #T_in except from firts instant is set by RETE MATRICE
         T_out = self.T['T_in'] - (self.P['P_in'] / self.G['G_in'] / self.properties['cpw'])
         self.T['T_out'] = T_out
 

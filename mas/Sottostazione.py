@@ -1,5 +1,6 @@
 import aiomas
 import time
+#TODO APPEND TO HISTORY FIND THE BEST PLACE
 
 class Sottostazione(aiomas.Agent):
     def __init__(self, container, name, sid, netdata, inputdata, properties, ts_size):
@@ -7,7 +8,7 @@ class Sottostazione(aiomas.Agent):
 
         # params
         self.name = name
-        self.sid = sid
+        self.sid = int(sid)
         #knowledge of the system
         self.netdata = netdata
         self.inputdata = inputdata
@@ -45,8 +46,13 @@ class Sottostazione(aiomas.Agent):
         return self.G[key]
 
     @aiomas.expose
-    async def get_T(self, key):
-        return self.T[key]
+    async def get_T(self, key, ts=None):
+        if not ts:
+            self.T[key] = self.properties['init']['TBC']
+            return (self.sid ,self.T[key])
+        else:
+            return (self.Sid,self.history['T'][key][ts])
+
 
     @aiomas.expose
     async def get_P(self, key):
