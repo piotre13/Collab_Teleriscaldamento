@@ -19,14 +19,12 @@ class Sottostazione(aiomas.Agent):
                   'T_out': None}
         self.G = {'G_in': None,
                   'G_out': None}
-        self.P = {'P_in': None,
-                  'P_out': None}  # todo review the data
+        self.P = []
         self.history = {'T_in': [],
                         'T_out': [],
                         'G_in': [],
                         'G_out': [],
-                        'P_in': [],
-                        'P_out': []
+                        'P':[]
                         }
 
     @classmethod
@@ -38,8 +36,11 @@ class Sottostazione(aiomas.Agent):
         return sottostazione
 
     @aiomas.expose
-    async def step (self):
-        pass
+    async def calc_P(self):
+        #TODO check signs and equation
+        self.P = self.G['G_out']*self.properties['cpw'] * (self.T['T_out']-self.T['T_in'])
+        self.history['P'].append(self.P)
+
 
     @aiomas.expose
     async def get_G(self, key):
@@ -59,9 +60,10 @@ class Sottostazione(aiomas.Agent):
         return self.P[key]
 
     @aiomas.expose
-    async def set_T(self,key,T):
+    async def set_T(self,key, T):
         print('setting T_in of sottostazione%s at time: %s'%(self.sid,str(self.container.clock.time()/self.ts_size)))
-        self.T[key]=T
+        self.T[key] = T
+        self.history[key].append(T)
 
     @aiomas.expose
     async def set_P(self, key, P):
@@ -70,3 +72,8 @@ class Sottostazione(aiomas.Agent):
     @aiomas.expose
     async def set_G(self, key, G):
         self.G[key] = G
+        self.history[key].append(G)
+
+    @aiomas.expose
+    async def get_history(self):
+        return(self.sid,self.history)

@@ -101,6 +101,9 @@ class Simulator():
 
 
         # *********** FINALIZE condition #when outside the loop
+        #TODO make a good report and final check if its working
+        futs = [grid[0].reporting() for grid in self.grids]
+        reports_subs = await asyncio.gather(*futs)
         await self.finalize()
         return (print('simul SUCCESSFULLY ended!'))
         # **********************************

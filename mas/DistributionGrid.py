@@ -18,8 +18,6 @@ class DistGrid(aiomas.Agent):
         self.inputdata= inputdata
         self.prop = properties
         self.ts_size = ts_size
-        #todo preparare una funztioncina che all'inizio mi crea un po di variabili self utili
-        #eg (NN, NB, L, D, D_ext
 
         #graph testing
         self.graph = self.incidence2graph()
@@ -33,8 +31,26 @@ class DistGrid(aiomas.Agent):
         self.utenze = []
         self.uts_names = []
 
+        #data report
+        self.report = {'mandata':{
+                                    'T_ut':[],
+                                    'T_sub':[],
+                                    'T':[],
+                                    'G_ut':[],
+                                    'G_sub':[],
+                                    'G':[]
+                                },
+                       'ritorno':{
+                                    'T_ut':[],
+                                    'T_sub':[],
+                                    'T':[],
+                                    'G_ut':[],
+                                    'G_sub':[],
+                                    'G':[]
+                       },
+                        'Phi':[]
+        }
 
-        #data
 
     @classmethod
     async def create(cls, container, name, rid, netdata, inputdata, properties, ts_size):
@@ -81,33 +97,71 @@ class DistGrid(aiomas.Agent):
 
     @aiomas.expose
     async def step (self):
+        ts = int(self.container.clock.time() / self.ts_size)
         #INITIALIZATION AT FIRST TIMESTEP
-        if (self.container.clock.time() / self.ts_size) == 0:
+        if ts == 0:
             futs = [ut[0].set_T('T_in', self.prop['init']['T_utenza_in']) for ut in self.utenze]
             await asyncio.gather(*futs)
             futs = [sub[0].set_T('T_out', self.prop['init']['TBC']) for sub in self.substations]
             await asyncio.gather(*futs)
+
 
         #calcolo portate per istante t EQUAZIONE DI CONTINUITA'
         futs = [ut[0].get_G('G_in') for ut in self.utenze]
         G_ut = await asyncio.gather(*futs) #iterable of tuples with utenza_id and Portata in ingresso
         G_ext = self.create_Gext(G_ut) # vettore NNx1 con le portate di utenze e -sum(all) per TBC
         G = self.eq_continuità(G_ext)
+        futs = [sub[0].set_G('G_out', G[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
+        await asyncio.gather(*futs)
+
+        self.report['mandata']['G'].append(G_ext)
+
+        #richiesta temperatura mandata sottostazioni
         futs = [sub[0].get_T('T_out') for sub in self.substations]
         TBC = await asyncio.gather(*futs)
+        T_in = TBC
 
-        K, f, M = self.create_matrices(G,G_ext,TBC,'mandata')
+        #calcolo delle matrici
+        M, K, f = self.create_matrices(G,G_ext,TBC,'mandata')
+
+        #conservazione dell'energia: calcolo delle temperature in tutti i nodi
+        T_res = self.calc_temperatures(M,K,f, T_in)
+        self.report['mandata']['T'].append(T_res)
+
+        #update utenze e substation con le temperature calcolate
+        futs = [ut[0].set_T('T_in',T_res[i]) for ut,i in zip(self.utenze,self.netdata['UserNode'])]
+        await asyncio.gather(*futs)
+        futs = [sub[0].set_T('T_out', T_res[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
+        await asyncio.gather(*futs)
+
+        #RITORNO**********************************************************************************************************
+        #calcolo delle temperature di uscita dalle utenze
+        futs = [ut[0].get_P() for ut in self.utenze]
+        P = await asyncio.gather(*futs)
+        futs = [ut[0].get_T('T_out') for ut in self.utenze]
+        T2 = await asyncio.gather(*futs)
+        T_in = T2
+        #calcolo portate
+        G = - G
+        G_ext = - G_ext
+        self.report['ritorno']['G'].append(G_ext)
+        #calcolo delle matrici
+        M_r, K_r, f_r = self.create_matrices(G, G_ext, T_in, 'ritorno')
+        T_res = self.calc_temperatures(M_r,K_r,f_r,T_in)
+        futs = [sub[0].set_T('T_in', T_res[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
+        await asyncio.gather(*futs)
+        futs = [sub[0].calc_P() for sub in self.substations]
+        await asyncio.gather(*futs)
 
 
 
 
-        #step2 calc RITORNO
 
 
     def create_Gext(self, G_ut):
         #TODO non ho fatto i nodi multipli ricorda!!!
         G_ext = np.zeros(len(self.netdata['A']))
-        for el in G_ut: G_ext[el[0]]=el[1][0]
+        for el in G_ut: G_ext[el[0]]=el[1]
         G_BCT = np.sum(G_ext)*-1
         #in caso ci siano più sottopstazioni (ognuna contribuisce ugualmente alla portata)
         if len(self.substations)>1:
@@ -125,12 +179,18 @@ class DistGrid(aiomas.Agent):
         return G
 
     def create_matrices(self,G,G_ext,T,dir):
+        ''' la T sta per T immissione e può essere o quella delle utenze o quella delle BCT
+        in entrambi i casi è una lista di tuple (id,T)'''
+        #TODO could be use sparse matrices for K and M to speed up the computation
         NN,NB = self.netdata['A'].shape
         L = self.netdata['L']
         D = self.netdata['D']
         D_ext = self.netdata['D_ext']
         U = self.prop['U']
         Tinf = self.prop['T_inf']
+        rho = self.prop['rhow']
+        cp = self.prop['cpw']
+
         if self.prop['branches']['Ctube']:
             cpste = self.prop['branches']['cpste']
             rhste = self.prop['branches']['rhste']
@@ -142,60 +202,119 @@ class DistGrid(aiomas.Agent):
             nodi_immissione = self.netdata['BCT']
             nodi_estrazione = self.netdata['UserNode']
             T_immissione = T
+            graph = self.graph.copy()
         elif dir == 'ritorno':
             nodi_immissione = self.netdata['UserNode']
             nodi_estrazione = self.netdata['BCT']
             T_immissione= T
+            graph = self.graph.reverse()
         else:
             raise ValueError ('Unknown direction!')
         #init the matrices
         K = np.zeros([NN,NN])
-        M_vec = np.zeros([NN,1])
-        f = np.zeros([NN,1])
+        M_vec = np.zeros(NN)
+        f = np.zeros(NN)
 
 
-        for e in self.graph.edges():
+        for e in graph.edges():
+            nb = graph.get_edge_data(*e)['NB']
             #TODO finish here PD
-            M_vec[e[0]] = M_vec[e[0]] + self.prop['rhow']*self.prop['cpw']/self.ts_size * math.pi * D
-            M_vec[e[1]] = M_vec[e[1]] + self.prop['rhow']*self.prop['cpw']/self.ts_size * math.pi * D
+            M_vec[e[0]] = M_vec[e[0]] + rho * cp /self.ts_size * math.pi * D[nb] **2 /4 * L[nb]/2 \
+                          + rhste * cpste /self.ts_size * math.pi \
+                          * (D_ext[nb]**2 - D[nb]**2)/4 * L[nb]/2
+            M_vec[e[1]] = M_vec[e[1]] + rho * cp /self.ts_size * math.pi * D[nb] **2 /4 * L[nb]/2 \
+                          + rhste * cpste /self.ts_size * math.pi \
+                          * (D_ext[nb]**2 - D[nb]**2)/4 * L[nb]/2
 
         for i in range(NN): #loop nodi
             #nodi centrali
             if i not in nodi_immissione and i not in nodi_estrazione:
-                out_edges = list(self.graph.out_edges(i)) # because directed returns only out edges
+                out_edges = list(graph.out_edges(i))
                 for ed in out_edges:
-                    l = L[self.graph.get_edge_data(*ed)['NB']]
-                    d = D[self.graph.get_edge_data(*ed)['NB']]
+                    l = L[graph.get_edge_data(*ed)['NB']]
+                    d = D[graph.get_edge_data(*ed)['NB']]
 
-                    K[i, i] = K[i, i] + ((l * math.pi * d * self.prop['U']) / 2)  # posizioni sulla diagonale
+                    K[i, i] = K[i, i] + ((l * math.pi * d * U) / 2)  # posizioni sulla diagonale
 
-                    f[i] = f[i] + ((l * math.pi * d * self.prop['U'] * self.prop['T_inf']) / 2) #vettore f per branches uscenti
+                    f[i] = f[i] + ((l * math.pi * d * U * self.prop['T_inf']) / 2) #vettore f per branches uscenti
 
-                    K[i,ed[1]] = - self.prop['cpw'] * G[self.graph.get_edge_data(*ed)['NB']] # posizioni (nodo entrante, nodo uscente)d
-                in_edges = list(self.graph.in_edges(i))
+                    K[i,ed[1]] = - cp * G[graph.get_edge_data(*ed)['NB']] # posizioni (nodo entrante, nodo uscente)d
+
+                in_edges = list(graph.in_edges(i))
                 for ed in in_edges:
-                    l = L[self.graph.get_edge_data(*ed)['NB']]
-                    d = D[self.graph.get_edge_data(*ed)['NB']]
+                    l = L[graph.get_edge_data(*ed)['NB']]
+                    d = D[graph.get_edge_data(*ed)['NB']]
 
-                    K[i, i] = K[i, i] + self.prop['cpw'] * G[self.graph.get_edge_data(*ed)['NB']] +((l * math.pi * d * self.prop['U']) / 2)  # posizioni sulla diagonale
+                    K[i, i] = K[i, i] + cp * G[graph.get_edge_data(*ed)['NB']] +((l * math.pi * d * U) / 2)  # posizioni sulla diagonale
 
-                    f[i] = f[i] + ((l * math.pi * d * self.prop['U'] * self.prop['T_inf']) / 2)
+                    f[i] = f[i] + ((l * math.pi * d * U * self.prop['T_inf']) / 2)
 
             #nodi estremi (imm ed estr)
             else:
-                if i in nodi_immissione:
-                    pass
-                elif i in nodi_estrazione:
-                    pass
+                if i in nodi_estrazione:
+                    in_edges = list(graph.in_edges(i))
+                    for ed in in_edges:
+                        nb =graph.get_edge_data(*ed)['NB']
+                        K[i,ed[0]] = - cp * G[nb] + L[nb]* math.pi * D[nb] * U /4
 
-        print(K)
+                        K[i,i] = cp * G[nb] + L[nb] * math.pi * D[nb]* U /4
+
+                        f[i] = L[nb] * math.pi * D[nb] * U * self.prop['T_inf']/2
+
+                        M_vec[i] = rho * cp /self.ts_size *math.pi * D[nb]**2 /4 * L[nb] /2 \
+                                   + rhste * cpste /self.ts_size * math.pi *(D_ext[nb]**2 - D[nb]**2)/4 *L[nb]/2
+
+                    out_edges = list(graph.out_edges(i))
+                    for ed in out_edges:
+                        nb = graph.get_edge_data(*ed)['NB']
+                        if G[nb] < np.finfo(float).eps:
+                            K[i,ed[1]] = - cp * G[nb] + L[nb] * math.pi * D[nb] * U /4
+                            K [i,i] =  cp * G[nb] + L[nb] * math.pi * D[nb]* U /4
+                            f[i] = L[nb] * math.pi * D[nb] * U * self.prop['T_inf'] / 2
+                            M_vec[i] = rho * cp / self.ts_size * math.pi * D[nb] ** 2 / 4 * L[nb] / 2 \
+                                       + rhste * cpste / self.ts_size * math.pi * (D_ext[nb] ** 2 - D[nb] ** 2) / 4 * L[
+                                           nb] / 2
+
+                elif i in nodi_immissione:
+                    out_edges = list (graph.out_edges(i))
+                    for ed in out_edges:
+                        nb= graph.get_edge_data(*ed)['NB']
+                        if abs(G_ext[i]) > np.finfo(float).eps:
+                            K[i,:] = 0
+                            K[i,i] = 1
+                            #todo should change this for the temperature could be aranged in a vector at the beginning
+                            for j in T_immissione:
+                                if j[0] == i:
+                                    T=j[1]
+                            f[i] = T
+                            M_vec[i] = 0
+
+        M = M_vec * np.identity(len(M_vec)) # diagonal matrix with M_vec values
+        return M, K , f
 
 
 
-    def calc_temperatures(self):
+    def calc_temperatures(self, M , K , f, T):
         #M K f vanno tirate fuori in generate matrices
-        #T = (M + K)\(f + M * T);
-        return #T
+        Temp = np.ones(K.shape[0])* self.prop['init']['T_utenza_in']
+        for el in T:
+            Temp[el[0]]=el[1]
+
+        Temp = np.linalg.lstsq((M+K), (f + np.matmul(M,Temp)), 1.e-10)[0]
+
+        return Temp
+
+    @aiomas.expose
+    async def reporting(self):
+        futs = [sub[0].get_history() for sub in self.substations]
+        reports_subs = await asyncio.gather(*futs)
+        futs = [ut[0].get_history() for ut in self.utenze]
+        reports_ut = await asyncio.gather(*futs)
+        data={}
+        data['sottostazioni'] = reports_subs
+        data['utenze'] = reports_ut
+        return data
+
 
     def incidence2graph(self):
         #am = (np.dot(self.netdata['A'], self.netdata['A'].T) != 0).astype(int)
