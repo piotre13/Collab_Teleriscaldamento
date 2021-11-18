@@ -4,6 +4,8 @@ from mas import util
 import multiprocessing
 import sys
 
+#TODO TEST with interpolated data 2156 ts
+
 class Simulator():
 
     def __init__(self, config):
@@ -27,10 +29,6 @@ class Simulator():
         grid_num = config['num_Grids']
         self.properties = config['properties']
         self.grids = []
-
-        #DATA MANAGEMENT
-        #todo insert the self needed for reporting and create a function for reporting
-        #todo design the function as most performing possible
 
         # containers proxy
         self.main_container = None
@@ -79,7 +77,7 @@ class Simulator():
             # testing try block
             try:
                 futs = [grid[0].step() for grid in self.grids]
-                data_grid = await asyncio.gather(*futs)
+                await asyncio.gather(*futs) # making the step for all the grids mandata + ritorno
 
             except Exception as e:
                 await self.finalize()
@@ -104,6 +102,7 @@ class Simulator():
         #TODO make a good report and final check if its working
         futs = [grid[0].reporting() for grid in self.grids]
         reports_subs = await asyncio.gather(*futs)
+        #this data is a list for each dist grid with dict cpontaining info of substations and utenze
         await self.finalize()
         return (print('simul SUCCESSFULLY ended!'))
         # **********************************
@@ -128,7 +127,7 @@ class Simulator():
             netdata['D_ext'] = netdata['D'] * self.properties['branches']['D_ext']['c1'] + 2 *  self.properties['branches']['D_ext']['c2']
             inputdata = util.read_data(self.paths['input_data'])
             for i in range (NUM):
-                await self.create_distGrid(i, netdata, inputdata)#TODO CREATION FROM DISTGRID --> SUBSTATIONS ---> UTENZE
+                await self.create_distGrid(i, netdata, inputdata)
 
 
 
@@ -142,7 +141,6 @@ class Simulator():
             addrs.append('tcp://%s:%s/0' % addr)
 
             # NB the python path is the one of the environment
-            #todo could use sys.executable for the python interpreter
             cmd = [
                 sys.executable,
                 '-m', 'mas.container',

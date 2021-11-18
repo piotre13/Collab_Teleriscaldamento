@@ -21,7 +21,7 @@ class Utenza(aiomas.Agent):
                   'T_out':None}
         self.G = {'G_in':None,
                   'G_out':None}
-        self.P_req = None #todo review the data maybe the out is not needed
+        self.P_req = None
         self.history = {'T_in':[],
                         'T_out':[],
                         'G_in':[],
@@ -48,7 +48,12 @@ class Utenza(aiomas.Agent):
             #update the state G
             self.G[key] = G
             self.history[key].append(G)
+            #flows in return are the same with changed sign but its only convention
+            self.G['G_out'] = -G
+            self.history['G_out'].append(-G)
+
         elif key == 'G_out':
+            #to avoid recalling the method i put everything in calc_G in
             #with no mass loss should be equal at G_in #todo
             pass
 

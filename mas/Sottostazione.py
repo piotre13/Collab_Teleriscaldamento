@@ -29,7 +29,7 @@ class Sottostazione(aiomas.Agent):
 
     @classmethod
     async def create(cls, container, name, sid, netdata, inputdata, properties, ts_size):
-        #todo maybe should be initialized a temperature di mandata
+
         sottostazione = cls(container,name, sid, netdata, inputdata, properties, ts_size)
         print('Created Sottostazione Agent: %s'%name)
 

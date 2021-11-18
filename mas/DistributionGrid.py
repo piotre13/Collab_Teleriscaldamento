@@ -21,6 +21,11 @@ class DistGrid(aiomas.Agent):
 
         #graph testing
         self.graph = self.incidence2graph()
+        # net = Network()
+        # net.from_nx(self.graph)
+        # net.show_buttons()
+        # net.show('data/grid.html')
+
         #dir=nx.is_directed(self.graph)
 
 
@@ -31,25 +36,8 @@ class DistGrid(aiomas.Agent):
         self.utenze = []
         self.uts_names = []
 
-        #data report
-        self.report = {'mandata':{
-                                    'T_ut':[],
-                                    'T_sub':[],
-                                    'T':[],
-                                    'G_ut':[],
-                                    'G_sub':[],
-                                    'G':[]
-                                },
-                       'ritorno':{
-                                    'T_ut':[],
-                                    'T_sub':[],
-                                    'T':[],
-                                    'G_ut':[],
-                                    'G_sub':[],
-                                    'G':[]
-                       },
-                        'Phi':[]
-        }
+        self.temperatures = {'mandata':[],
+                             'ritorno': [] }
 
 
     @classmethod
@@ -63,11 +51,7 @@ class DistGrid(aiomas.Agent):
         await grid.create_substations()
         await grid.create_utenze()
         #part for graph testing ignore
-        # nx.set_node_attributes(grid.graph, grid.node_attr)
-        # net = Network()
-        # net.from_nx(grid.graph)
-        # net.show_buttons()
-        # net.show('data/grid.html')
+
         return grid
 
     async def create_substations(self):
@@ -104,17 +88,22 @@ class DistGrid(aiomas.Agent):
             await asyncio.gather(*futs)
             futs = [sub[0].set_T('T_out', self.prop['init']['TBC']) for sub in self.substations]
             await asyncio.gather(*futs)
-
+            futs = [sub[0].get_T('T_out') for sub in self.substations]
+            TBC = await asyncio.gather(*futs)
+            T_in= np.ones(len(self.netdata['A'])) * self.prop['init']['T_utenza_in']
+            for el in TBC:
+                T_in[el[0]] = el[1]
+            self.temperatures['mandata'].append(T_in)
+            T_in_ret = np.ones(len(self.netdata['A'])) * self.prop['init']['T_in_ritorno']
+            self.temperatures['ritorno'].append(T_in_ret)
 
         #calcolo portate per istante t EQUAZIONE DI CONTINUITA'
         futs = [ut[0].get_G('G_in') for ut in self.utenze]
         G_ut = await asyncio.gather(*futs) #iterable of tuples with utenza_id and Portata in ingresso
         G_ext = self.create_Gext(G_ut) # vettore NNx1 con le portate di utenze e -sum(all) per TBC
         G = self.eq_continuità(G_ext)
-        futs = [sub[0].set_G('G_out', G[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
+        futs = [sub[0].set_G('G_out', G_ext[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
         await asyncio.gather(*futs)
-
-        self.report['mandata']['G'].append(G_ext)
 
         #richiesta temperatura mandata sottostazioni
         futs = [sub[0].get_T('T_out') for sub in self.substations]
@@ -123,10 +112,12 @@ class DistGrid(aiomas.Agent):
 
         #calcolo delle matrici
         M, K, f = self.create_matrices(G,G_ext,TBC,'mandata')
+        #check matrices
+        self.check(M,K,f)
 
         #conservazione dell'energia: calcolo delle temperature in tutti i nodi
-        T_res = self.calc_temperatures(M,K,f, T_in)
-        self.report['mandata']['T'].append(T_res)
+        T_res = self.calc_temperatures(M,K,f, self.temperatures['mandata'][ts])
+        self.temperatures['mandata'].append(T_res)
 
         #update utenze e substation con le temperature calcolate
         futs = [ut[0].set_T('T_in',T_res[i]) for ut,i in zip(self.utenze,self.netdata['UserNode'])]
@@ -141,13 +132,17 @@ class DistGrid(aiomas.Agent):
         futs = [ut[0].get_T('T_out') for ut in self.utenze]
         T2 = await asyncio.gather(*futs)
         T_in = T2
+
         #calcolo portate
         G = - G
         G_ext = - G_ext
-        self.report['ritorno']['G'].append(G_ext)
+        futs = [sub[0].set_G('G_in', G_ext[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
+        await asyncio.gather(*futs)
+
         #calcolo delle matrici
         M_r, K_r, f_r = self.create_matrices(G, G_ext, T_in, 'ritorno')
-        T_res = self.calc_temperatures(M_r,K_r,f_r,T_in)
+        T_res = self.calc_temperatures(M_r,K_r,f_r,self.temperatures['ritorno'][ts])
+        self.temperatures['ritorno'].append(T_res)
         futs = [sub[0].set_T('T_in', T_res[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
         await asyncio.gather(*futs)
         futs = [sub[0].calc_P() for sub in self.substations]
@@ -218,7 +213,7 @@ class DistGrid(aiomas.Agent):
 
         for e in graph.edges():
             nb = graph.get_edge_data(*e)['NB']
-            #TODO finish here PD
+
             M_vec[e[0]] = M_vec[e[0]] + rho * cp /self.ts_size * math.pi * D[nb] **2 /4 * L[nb]/2 \
                           + rhste * cpste /self.ts_size * math.pi \
                           * (D_ext[nb]**2 - D[nb]**2)/4 * L[nb]/2
@@ -229,8 +224,8 @@ class DistGrid(aiomas.Agent):
         for i in range(NN): #loop nodi
             #nodi centrali
             if i not in nodi_immissione and i not in nodi_estrazione:
-                out_edges = list(graph.out_edges(i))
-                for ed in out_edges:
+                in_edges = list(graph.in_edges(i))
+                for ed in in_edges:
                     l = L[graph.get_edge_data(*ed)['NB']]
                     d = D[graph.get_edge_data(*ed)['NB']]
 
@@ -238,10 +233,10 @@ class DistGrid(aiomas.Agent):
 
                     f[i] = f[i] + ((l * math.pi * d * U * self.prop['T_inf']) / 2) #vettore f per branches uscenti
 
-                    K[i,ed[1]] = - cp * G[graph.get_edge_data(*ed)['NB']] # posizioni (nodo entrante, nodo uscente)d
+                    K[i,ed[0]] = - cp * G[graph.get_edge_data(*ed)['NB']] # posizioni (nodo entrante, nodo uscente)d
 
-                in_edges = list(graph.in_edges(i))
-                for ed in in_edges:
+                out_edges = list(graph.out_edges(i))
+                for ed in out_edges:
                     l = L[graph.get_edge_data(*ed)['NB']]
                     d = D[graph.get_edge_data(*ed)['NB']]
 
@@ -251,6 +246,7 @@ class DistGrid(aiomas.Agent):
 
             #nodi estremi (imm ed estr)
             else:
+
                 if i in nodi_estrazione:
                     in_edges = list(graph.in_edges(i))
                     for ed in in_edges:
@@ -267,7 +263,7 @@ class DistGrid(aiomas.Agent):
                     out_edges = list(graph.out_edges(i))
                     for ed in out_edges:
                         nb = graph.get_edge_data(*ed)['NB']
-                        if G[nb] < np.finfo(float).eps:
+                        if abs(G[nb]) < np.finfo(float).eps:
                             K[i,ed[1]] = - cp * G[nb] + L[nb] * math.pi * D[nb] * U /4
                             K [i,i] =  cp * G[nb] + L[nb] * math.pi * D[nb]* U /4
                             f[i] = L[nb] * math.pi * D[nb] * U * self.prop['T_inf'] / 2
@@ -282,7 +278,7 @@ class DistGrid(aiomas.Agent):
                         if abs(G_ext[i]) > np.finfo(float).eps:
                             K[i,:] = 0
                             K[i,i] = 1
-                            #todo should change this for the temperature could be aranged in a vector at the beginning
+                            #todo should change this for the temperature could be aranged in a vector at the beginning ???
                             for j in T_immissione:
                                 if j[0] == i:
                                     T=j[1]
@@ -295,14 +291,10 @@ class DistGrid(aiomas.Agent):
 
 
     def calc_temperatures(self, M , K , f, T):
-        #M K f vanno tirate fuori in generate matrices
-        Temp = np.ones(K.shape[0])* self.prop['init']['T_utenza_in']
-        for el in T:
-            Temp[el[0]]=el[1]
 
-        Temp = np.linalg.lstsq((M+K), (f + np.matmul(M,Temp)), 1.e-10)[0]
+        T = np.linalg.lstsq((M+K), (f + np.matmul(M,T)), 1.e-10)[0]
 
-        return Temp
+        return T
 
     @aiomas.expose
     async def reporting(self):
@@ -317,24 +309,53 @@ class DistGrid(aiomas.Agent):
 
 
     def incidence2graph(self):
+        #TODO pulire questa funzione
         #am = (np.dot(self.netdata['A'], self.netdata['A'].T) != 0).astype(int)
         #am = (np.dot(self.netdata['A'], self.netdata['A'].T)).astype(int)
         #np.fill_diagonal(am, 0)
-        Ad = np.zeros( [self.netdata['A'].shape[0], self.netdata['A'].shape[0]], dtype=int)
-        edge_attrs = {}
-        lenght = {'lenght': 0.0}
+        #Ad = np.zeros( [self.netdata['A'].shape[0], self.netdata['A'].shape[0]], dtype=int)
+        #edge_attrs = {}
+        #lenght = {'lenght': 0.0}
+        G = nx.DiGraph()
         n = 0
         for column in self.netdata['A'].T:
-            i = np.where(column > 0)
-            j = np.where(column < 0)
-            #l = float(self.netdata['L'][n])
-            edge_attrs[(int(j[0]),int(i[0]))]= {'lenght': self.netdata['L'][n],
-                                                'D': self.netdata['D'][n],
-                                                'NB':n}
-            Ad[j, i] = 1
-            n+=1
-        graph = nx.from_numpy_array(Ad, create_using=nx.DiGraph)
-        nx.set_edge_attributes(graph, edge_attrs)
 
-        return graph
+            i = np.where(column > 0)[0]
+            j = np.where(column < 0)[0]
+
+            G.add_edge(int(i[0]), int(j[0]), lenght=self.netdata['L'][n], D=self.netdata['D'][n], NB=n)
+            #l = float(self.netdata['L'][n])
+         #   edge_attrs[(int(i[0]),int(j[0]))]= {'lenght': self.netdata['L'][n],
+                                                #'D': self.netdata['D'][n],
+                                                #'NB':n}
+          #  Ad[i, j] = 1
+            n+=1
+
+        #reversing what probably is an error in the flow
+        # end_nodes = [x for x in G.nodes() if G.out_degree(x) > 0 and G.in_degree(x) == 0]
+        # end_nodes.pop(0)
+        # for node in end_nodes:
+        #     edge_out =  list(G.out_edges(node))
+        #     for ed in edge_out:
+        #         G.remove_edge(*ed)
+        #         G.add_edge(ed[1],ed[0],lenght = ed['lenght'],D=ed['D'],NB=ed['NB'])
+        #graph = nx.from_numpy_array(Ad, create_using=nx.DiGraph)
+        #nx.set_edge_attributes(graph, edge_attrs)
+
+        return G
+
+    def check (self,M, K, f):
+        from mat4py import loadmat
+        import scipy.io
+
+        f_t =scipy.io.loadmat('/home/pietrorm/Scaricati/f_precalcT.mat')['f']
+        M_t = scipy.io.loadmat('/home/pietrorm/Scaricati/M_precalcT.mat')['M'].toarray()
+        K_t = scipy.io.loadmat('/home/pietrorm/Scaricati/K_precalcT.mat')['K'].toarray()
+
+        #same1 = np.allclose(K, K_t,rtol=1e-02, atol=1e-04,)
+        sameK = K==K_t
+        #same2 = np.allclose(M, M_t,rtol=1e-02, atol=1e-04,)
+        sameM = M == M_t
+        samef = f == f_t.T
+        print(sameK,sameM,samef)
 

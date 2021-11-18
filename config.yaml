@@ -27,6 +27,7 @@ properties:
   init:
     T_utenza_in: 353.1500
     TBC: 391.1500
+    T_in_ritorno: 318.1500
 
 #simulation
 START: '2013-05-11T21:23:58.970460+07:00' #utc format or arrow getable format
