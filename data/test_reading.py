@@ -5,50 +5,51 @@ from pyvis.network import Network
 
 
 data = loadmat('NetData419.mat')
-nn=len(data['A'])
+
 A = np.array(data['A'])
-Ad = np.zeros((len(data['A']),len(data['A'])),dtype=int)
+L = np.array(data['L'])
+D = np.array(data['D'])
+BCT = np.array([data['BCT']-1])
+US_node = np.array([x - 1 for x in data['UserNode']])
+
+
+G = nx.Graph()
+n = 0
 for column in A.T:
-    i = np.where(column>0)
-    j = np.where(column<0)
-    Ad[i,j]=1
+    i = np.where(column > 0)[0]
+    j = np.where(column < 0)[0]
 
-    pass
+    G.add_edge(int(i[0]), int(j[0]), lenght=L[n], D=D[n],  NB=n)
+    n += 1
 
-print(Ad)
-# data_py={}
-# for key, d in data.items():
-#     if not isinstance(d, list):
-#         data_py[key]= np.array([d])
-#     else:
-#         data_py[key] = np.array(d)
-#
-# print(data_py['BCT'])
-# for i in range( len(data_py['BCT'])):
-#     print (i)
-# print (data)
-#
-#
-#
-# #TODO THIS IS HOW TO CRETE A GRAPH TWO POSSIBLE SOLUTIONS NEED TO UNDERSTAND IF USING THE GRAPH DATATYPE IS BETTER
-# #creating a graph from the incindence matrix
-# #am = (np.dot(A, A.T) != 0).astype(int)
-# #np.fill_diagonal(am, 0)
-# #graph = networkx.from_numpy_matrix(am)
-#
-# node = range(201)
-# edges = []
-# for column in A.T:
-#     print(column)
-#     ed_in = int(np.where(column>0)[0])
-#     ed_out = int(np.where(column<0)[0])
-#     edges.append([ed_in,ed_out])
-# G = nx.Graph()
-# G.add_nodes_from(node)
-# G.add_edges_from(edges)
-#
-# #print (graph)
-# net=Network()
-# net.from_nx(G)
-# net.show_buttons()
-# net.show('data/grid.html')
+print(G)
+x= G.is_directed()
+
+DiG = nx.DiGraph()
+#this only works with one substation must be updated for more than une substation
+for sub in BCT:
+    for utenza in US_node:
+        path = nx.shortest_path(G,sub,utenza,'lenght')
+        for i in range(len(path)-1):
+            #ed = (path[i],path[i+1])
+            attr = G.get_edge_data(int(path[i]),int(path[i+1]))
+            DiG.add_edge(int(path[i]),int(path[i+1]), **attr)
+
+remaining_nodes = set(G.nodes)-set(DiG.nodes)
+#is possible that in remaining nodes there are nodes connected between each others
+for n in remaining_nodes:
+    ed = G.edges(n)
+    for e in ed:
+        attr = G.get_edge_data(*e)
+        e = list(e)
+        e.remove(n)
+        DiG.add_edge(e[0],n,**attr)
+
+
+REV_GRAPH = DiG.reverse()
+#es = nx.shortest_path(G,4,30,'lenght')
+
+net = Network()
+net.from_nx(REV_GRAPH)
+net.show_buttons()
+net.show('grid_test_rev.html')

@@ -113,7 +113,7 @@ class DistGrid(aiomas.Agent):
         #calcolo delle matrici
         M, K, f = self.create_matrices(G,G_ext,TBC,'mandata')
         #check matrices
-        self.check(M,K,f)
+        #self.check(M,K,f)
 
         #conservazione dell'energia: calcolo delle temperature in tutti i nodi
         T_res = self.calc_temperatures(M,K,f, self.temperatures['mandata'][ts])
@@ -125,6 +125,7 @@ class DistGrid(aiomas.Agent):
         futs = [sub[0].set_T('T_out', T_res[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
         await asyncio.gather(*futs)
 
+        #TODO CHECK IL RITORNO NON FUNZIONA!!!
         #RITORNO**********************************************************************************************************
         #calcolo delle temperature di uscita dalle utenze
         futs = [ut[0].get_P() for ut in self.utenze]
@@ -309,40 +310,35 @@ class DistGrid(aiomas.Agent):
 
 
     def incidence2graph(self):
-        #TODO pulire questa funzione
-        #am = (np.dot(self.netdata['A'], self.netdata['A'].T) != 0).astype(int)
-        #am = (np.dot(self.netdata['A'], self.netdata['A'].T)).astype(int)
-        #np.fill_diagonal(am, 0)
-        #Ad = np.zeros( [self.netdata['A'].shape[0], self.netdata['A'].shape[0]], dtype=int)
-        #edge_attrs = {}
-        #lenght = {'lenght': 0.0}
-        G = nx.DiGraph()
+
+        G = nx.Graph()
         n = 0
         for column in self.netdata['A'].T:
-
             i = np.where(column > 0)[0]
             j = np.where(column < 0)[0]
-
             G.add_edge(int(i[0]), int(j[0]), lenght=self.netdata['L'][n], D=self.netdata['D'][n], NB=n)
-            #l = float(self.netdata['L'][n])
-         #   edge_attrs[(int(i[0]),int(j[0]))]= {'lenght': self.netdata['L'][n],
-                                                #'D': self.netdata['D'][n],
-                                                #'NB':n}
-          #  Ad[i, j] = 1
             n+=1
+        DiG = nx.DiGraph()
+        # this only works with one substation must be updated for more than une substation
+        for sub in self.netdata['BCT']:
+            for utenza in self.netdata['UserNode']:
+                path = nx.shortest_path(G, sub, utenza, 'lenght')
+                for i in range(len(path) - 1):
+                    # ed = (path[i],path[i+1])
+                    attr = G.get_edge_data(int(path[i]), int(path[i + 1]))
+                    DiG.add_edge(int(path[i]), int(path[i + 1]), **attr)
 
-        #reversing what probably is an error in the flow
-        # end_nodes = [x for x in G.nodes() if G.out_degree(x) > 0 and G.in_degree(x) == 0]
-        # end_nodes.pop(0)
-        # for node in end_nodes:
-        #     edge_out =  list(G.out_edges(node))
-        #     for ed in edge_out:
-        #         G.remove_edge(*ed)
-        #         G.add_edge(ed[1],ed[0],lenght = ed['lenght'],D=ed['D'],NB=ed['NB'])
-        #graph = nx.from_numpy_array(Ad, create_using=nx.DiGraph)
-        #nx.set_edge_attributes(graph, edge_attrs)
+        remaining_nodes = set(G.nodes) - set(DiG.nodes)
 
-        return G
+        for n in remaining_nodes:
+            ed = G.edges(n)
+            for e in ed:
+                attr = G.get_edge_data(*e)
+                e = list(e)
+                e.remove(n)
+                DiG.add_edge(e[0], n, **attr)
+
+        return DiG
 
     def check (self,M, K, f):
         from mat4py import loadmat
