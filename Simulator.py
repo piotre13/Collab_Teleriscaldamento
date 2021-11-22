@@ -3,6 +3,7 @@ import asyncio
 from mas import util
 import multiprocessing
 import sys
+import pickle
 
 #TODO TEST with interpolated data 2156 ts
 
@@ -101,14 +102,19 @@ class Simulator():
         # *********** FINALIZE condition #when outside the loop
         #TODO make a good report and final check if its working
         futs = [grid[0].reporting() for grid in self.grids]
-        reports_subs = await asyncio.gather(*futs)
+        reports_grids = await asyncio.gather(*futs)
+        self.report((reports_grids))
         #this data is a list for each dist grid with dict cpontaining info of substations and utenze
         await self.finalize()
         return (print('simul SUCCESSFULLY ended!'))
         # **********************************
 
-
-
+    def report(self, reports):
+        '''reports is a list for each grid created that contains all reporting data...
+        this function saves the pickle to be used for analysis'''
+        with open('Final_reports.pickle', 'wb') as handle:
+            pickle.dump(reports, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        handle.close()
     async def create(self,NUM=None):
         #main container start todo check if is needed
         self.main_container = await aiomas.Container.create((self.host, self.port), as_coro=True, clock=self.clock, codec=aiomas.MsgPackBlosc, extra_serializers=[util.get_np_serializer])

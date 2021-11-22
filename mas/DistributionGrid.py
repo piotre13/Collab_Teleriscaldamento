@@ -136,7 +136,9 @@ class DistGrid(aiomas.Agent):
 
         #calcolo portate
         G = - G
+        G[G < 0] = G[G < 0] * -1
         G_ext = - G_ext
+        G_ext[G_ext < 0] = G_ext[G_ext < 0] * -1
         futs = [sub[0].set_G('G_in', G_ext[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
         await asyncio.gather(*futs)
 
