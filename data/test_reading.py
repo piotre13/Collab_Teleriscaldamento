@@ -1,7 +1,14 @@
-from mat4py import loadmat
+from mat4py import loadmat, savemat
 import numpy as np
 import networkx as nx
 from pyvis.network import Network
+
+data1 = loadmat('InputData419.mat')
+
+
+data2 = loadmat('/home/pietrorm/Documenti/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat')['InData']
+
+#savemat('/home/pietrorm/Documenti/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat', data2)
 
 
 data = loadmat('NetData419.mat')

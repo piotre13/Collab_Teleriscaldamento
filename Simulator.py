@@ -61,6 +61,7 @@ class Simulator():
             print('Error in the setting of time!')
             print(e)
 
+    #@profile
     async def run(self):
         '''
         main simulation function is the run of all the simulation contains a while loop
@@ -71,8 +72,8 @@ class Simulator():
 
         while self.clock.time() < (self.duration * self.ts_size):
 
-            print('===================')
-            print('start iteration %i ' % (self.clock.time() / self.ts_size), 'at timestamp:%i' % self.clock.time())
+            #print('===================')
+            #print('start iteration %i ' % (self.clock.time() / self.ts_size), 'at timestamp:%i' % self.clock.time())
             #print(self.clock.utcnow().format('YYYY-MM-DD HH:mm:ss ZZ'))
 
             # testing try block
@@ -89,7 +90,7 @@ class Simulator():
             # ********* END ITERATION
             self.cycle_done.set_result(None)
             await self.clock_setter() # update the timestep for both main container and sub containers
-            print('====================')
+            #print('====================')
 
 
             # ********** REPORTING CONDITION EVERY 24 H

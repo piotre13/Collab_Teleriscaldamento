@@ -4,6 +4,7 @@ import numpy
 import time
 from Simulator import Simulator
 import yaml
+#import cProfile
 
 
 
@@ -12,12 +13,17 @@ def main():
     try:
         t0 = time.time()
 
+
         #CREATION STEP
         config = read_config()
         Sim = Simulator(config)
 
+
         #SIMULATION STEP
+        ts0 = time.time()
         aiomas.run(until=Sim.run())
+        ts1 = time.time()
+
 
     except Exception as e:
         print(e)
@@ -27,7 +33,7 @@ def main():
         # Sim.shutdown()
         t1 = time.time()
         print('total time %f' % (t1 - t0))
-        print('agent creation time:' )
+        print('simulation time: %f' %(ts1-ts0) )
         print('done')
         #close everything
 

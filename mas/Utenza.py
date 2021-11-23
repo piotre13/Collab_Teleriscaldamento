@@ -107,7 +107,7 @@ class Utenza(aiomas.Agent):
 
     @aiomas.expose
     async def set_T(self,key, T):
-        print('setting T_in of utenza%s at time: %s'%(self.uid,str(self.container.clock.time()/self.ts_size)))
+        #print('setting T_in of utenza%s at time: %s'%(self.uid,str(self.container.clock.time()/self.ts_size)))
         self.T[key] = T
         self.history[key].append(T)
 

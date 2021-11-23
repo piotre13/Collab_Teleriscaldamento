@@ -67,9 +67,11 @@ def _serialize_ndarray(obj):
       'type': obj.dtype.str,
       'shape': obj.shape,
       'data': obj.tostring(),
+	   #'data': obj.tobytes(),
    }
 
 
 def _deserialize_ndarray(obj):
    array = np.fromstring(obj['data'], dtype=np.dtype(obj['type']))
+   #array = np.frombuffer(obj['data'], dtype=np.dtype(obj['type']))
    return array.reshape(obj['shape'])

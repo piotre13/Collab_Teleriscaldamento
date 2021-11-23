@@ -3,6 +3,9 @@ import asyncio
 import numpy as np
 import networkx as nx
 import math
+import scipy.sparse as sp
+from scipy.sparse import linalg as lng
+
 from pyvis.network import Network
 
 
@@ -210,6 +213,8 @@ class DistGrid(aiomas.Agent):
             raise ValueError ('Unknown direction!')
         #init the matrices
         K = np.zeros([NN,NN])
+        #K = sp.csr_matrix((NN,NN))
+        #K = sp.lil_matrix((NN,NN))
         M_vec = np.zeros(NN)
         f = np.zeros(NN)
 
@@ -288,15 +293,21 @@ class DistGrid(aiomas.Agent):
                             f[i] = T
                             M_vec[i] = 0
 
-        M = M_vec * np.identity(len(M_vec)) # diagonal matrix with M_vec values
+        #M = M_vec * np.identity(len(M_vec)) # diagonal matrix with M_vec values
+        M = sp.spdiags(M_vec,0, NN, NN)
+        K=sp.csr_matrix(K)
+
         return M, K , f
 
 
 
     def calc_temperatures(self, M , K , f, T):
 
-        T = np.linalg.lstsq((M+K), (f + np.matmul(M,T)), 1.e-10)[0]
+        #T = np.linalg.lstsq((M+K), (f + np.matmul(M,T)), 1.e-10)[0] # with normal matrices
+        #expression using sparse matrices
+        #T = np.linalg.lstsq((M+K), (f + M.dot(T)), 1.e-10)[0] # with normal matrices
 
+        T = lng.spsolve((M+K),(f+M.dot(T)))
         return T
 
     @aiomas.expose
