@@ -1,7 +1,7 @@
 ---
 paths:
-  grid_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
-  input_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
+  grid_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  input_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
   multiple_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/"
   py_interpreter: '/Users/pietrorandomazzarino/Environments/Collab_Teleriscaldamento/bin/python'
 
