@@ -4,6 +4,7 @@ import numpy as np
 import networkx as nx
 import math
 import scipy.sparse as sp
+import matplotlib.pyplot as plt
 from scipy.sparse import linalg as lng
 
 from pyvis.network import Network
@@ -123,16 +124,18 @@ class DistGrid(aiomas.Agent):
         self.temperatures['mandata'].append(T_res)
 
         #update utenze e substation con le temperature calcolate
+        #
         futs = [ut[0].set_T('T_in',T_res[i]) for ut,i in zip(self.utenze,self.netdata['UserNode'])]
         await asyncio.gather(*futs)
+        #todo l'update delle T_out di substation non dovrebbe servire fai check
         futs = [sub[0].set_T('T_out', T_res[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
         await asyncio.gather(*futs)
 
-        #TODO CHECK IL RITORNO NON FUNZIONA!!!
+
         #RITORNO**********************************************************************************************************
         #calcolo delle temperature di uscita dalle utenze
         futs = [ut[0].get_P() for ut in self.utenze]
-        P = await asyncio.gather(*futs)
+        P = await asyncio.gather(*futs) #serve per update le potenze nelle utenze
         futs = [ut[0].get_T('T_out') for ut in self.utenze]
         T2 = await asyncio.gather(*futs)
         T_in = T2
@@ -151,6 +154,7 @@ class DistGrid(aiomas.Agent):
         self.temperatures['ritorno'].append(T_res)
         futs = [sub[0].set_T('T_in', T_res[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
         await asyncio.gather(*futs)
+
         futs = [sub[0].calc_P() for sub in self.substations]
         await asyncio.gather(*futs)
 
@@ -182,7 +186,7 @@ class DistGrid(aiomas.Agent):
     def create_matrices(self,G,G_ext,T,dir):
         ''' la T sta per T immissione e può essere o quella delle utenze o quella delle BCT
         in entrambi i casi è una lista di tuple (id,T)'''
-        #TODO could be use sparse matrices for K and M to speed up the computation
+
         NN,NB = self.netdata['A'].shape
         L = self.netdata['L']
         D = self.netdata['D']
@@ -350,6 +354,11 @@ class DistGrid(aiomas.Agent):
                 e = list(e)
                 e.remove(n)
                 DiG.add_edge(e[0], n, **attr)
+
+        #drawing the graph and saving image comment when running
+        #.draw(DiG)
+        #plt.savefig('graph_image.png')
+
 
         return DiG
 

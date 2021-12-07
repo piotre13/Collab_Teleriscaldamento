@@ -6,7 +6,7 @@ paths:
   py_interpreter: '/Users/pietrorandomazzarino/Environments/Collab_Teleriscaldamento/bin/python'
 
 #scenario with dist grid replica
-num_Grids: 1
+num_Grids: 10
 
 #scenario with actual data decomment if using
 #num_Grids: None
