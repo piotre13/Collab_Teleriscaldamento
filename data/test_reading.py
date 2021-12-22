@@ -53,6 +53,9 @@ for n in remaining_nodes:
         DiG.add_edge(e[0],n,**attr)
 
 
+#testing for creation of synthetic trasport grid
+
+
 REV_GRAPH = DiG.reverse()
 #es = nx.shortest_path(G,4,30,'lenght')
 
