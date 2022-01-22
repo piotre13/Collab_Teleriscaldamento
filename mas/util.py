@@ -12,10 +12,12 @@ def get_container_kwargs(start_date):
 	*start_date* is an Arrow date-time object used to initialize the container
 	clock.
 	"""
+	#TODO CREATE A PROPER SERIALIZER FOR GRAPHS
 	return {
 		'clock': aiomas.ExternalClock(start_date, init_time=0),
 		'codec': aiomas.MsgPackBlosc,
-		'extra_serializers':[get_np_serializer, get_graphs_serializer],
+		#'extra_serializers':[get_np_serializer, get_graphs_serializer],
+		'extra_serializers': [get_np_serializer],
 	}
 
 

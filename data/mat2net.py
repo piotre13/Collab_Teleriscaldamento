@@ -16,6 +16,7 @@ import numpy as np
 import networkx as nx
 from pyvis.network import Network
 import pickle
+#from networkx.linalg.graphmatrix import adjacency_matrix
 
 
 def read_data(data_path):
@@ -45,19 +46,20 @@ def incidence2graph(netdata):
         for utenza in netdata['UserNode']:
             path = nx.shortest_path(G, sub, utenza, 'lenght')
             for i in range(len(path) - 1):
-                # ed = (path[i],path[i+1])
+
                 attr = G.get_edge_data(int(path[i]), int(path[i + 1]))
+
                 DiG.add_edge(int(path[i]), int(path[i + 1]), **attr)
 
     remaining_nodes = set(G.nodes) - set(DiG.nodes)
+    for sub in netdata['BCT']:
+        for node in remaining_nodes:
+            path = nx.shortest_path(G, sub, node, 'lenght')
+            for i in range(len(path) - 1):
 
-    for n in remaining_nodes:
-        ed = G.edges(n)
-        for e in ed:
-            attr = G.get_edge_data(*e)
-            e = list(e)
-            e.remove(n)
-            DiG.add_edge(e[0], n, **attr)
+                attr = G.get_edge_data(int(path[i]), int(path[i + 1]))
+
+                DiG.add_edge(int(path[i]), int(path[i + 1]), **attr)
 
     # adding attribute to BCT and utenze
     for node in DiG.nodes:
@@ -72,7 +74,13 @@ def incidence2graph(netdata):
     #.draw(DiG)
     #plt.savefig('graph_image.png')
 
+    surplus_edge = set(DiG.edges)-set(G.edges)
     #node_attr = DiG.nodes.data()
+    cycles = list(nx.simple_cycles(DiG))
+    net = Network()
+    net.from_nx(DiG)
+    net.show_buttons()
+    net.show('debug.html')
     return DiG
 
 
@@ -160,6 +168,16 @@ if __name__ == '__main__':
     final_graph = synthetic_whole_grid(base_graph, NUM_dist, NUM_gen)
 
     save_object(final_graph, scenario_name)
+
+    with open ('CompleteNetwork_G1_D5', 'rb') as f:
+        dist_graph = pickle.load(f)
+        dist_graph = dist_graph['dist_0']
+        f.close()
+    node_list = sorted(list(dist_graph.nodes), key=lambda x: int(x.split('_')[0]))
+    edge_list = sorted(dist_graph.edges(data=True), key=lambda t: t[2].get('NB', 1))
+    graph_matrix = nx.incidence_matrix(dist_graph,nodelist=node_list,edgelist=edge_list, oriented=True).todense().astype(int)
+    graph_matrix = np.array(graph_matrix)
+    A = read_data(net_data_path)['A']
 
 
     #dist_1_graph =

@@ -1,15 +1,15 @@
 ---
 paths:
-  grid_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
-  input_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
-  multiple_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/"
-  py_interpreter: '/home/pietrorm/Environments/District_heating/bin/python'
+  grid_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_G1_D5"
+  input_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
+  net_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  py_interpreter: '/home/pietrorm/Environments/District_heating/bin/python' # no need
 
-#scenario with dist grid replica
-num_Grids: 1
+#scenario with dist grid replica comment when using data of complete network
+#num_Grids: 1
 
 #scenario with actual data decomment if using
-#num_Grids: None
+num_Grids: None
 
 #properties
 properties:

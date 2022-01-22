@@ -1,5 +1,6 @@
 import aiomas
 import time
+import pickle
 
 #TODO APPEND TO HISTORY FIND THE BEST PLACE
 
@@ -29,8 +30,12 @@ class Sottostazione(aiomas.Agent):
                         }
 
     @classmethod
-    async def create(cls, container, name, sid, graph, UserNode, BCT, inputdata, properties, ts_size):
-
+    async def create(cls, container, name, sid, net_path, UserNode, BCT, inputdata, properties, ts_size):
+        #NB this accrocco does not allow to use on different machines should be avoided creating a proper serializer for grphs
+        with open (net_path,'rb') as f :
+            scenario = pickle.load(f)
+            graph = scenario[name.split('_')[0]+'_'+name.split('_')[1]]
+            f.close()
         sottostazione = cls(container,name, sid, graph, UserNode, BCT, inputdata, properties, ts_size)
         print('Created Sottostazione Agent: %s'%name)
 

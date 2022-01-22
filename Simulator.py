@@ -130,8 +130,9 @@ class Simulator(object):
         netdata =  util.read_data(self.paths['net_data'])
         UserNode = netdata['UserNode']
         BCT = netdata['BCT']
-        #CREATING
+        #CREATING #todo create the transport grid
         #await self.create_transpGrid(transp_list, UserNode, BCT, inputdata) # creating the transport grid
+        #must return an address of the transp grid and pass it to dist grid to register
         await self.create_distGrid(dist_list, UserNode, BCT, inputdata) # TODO the dist grid must register to the transp grid
         print('CREATION of AGENTS successfully completed!\n')
 

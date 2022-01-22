@@ -10,7 +10,7 @@ import pickle
 from pyvis.network import Network
 
 
-class DistGrid(aiomas.Agent):
+class TranspGrid(aiomas.Agent):
     def __init__(self, container, net_name,scenario, num, UserNode, BCT, inputdata, properties, ts_size):
         super().__init__(container)
         #univocal agent information
@@ -22,8 +22,6 @@ class DistGrid(aiomas.Agent):
 
         self.graph = scenario
         self.inputdata = inputdata
-        self.UserNode = UserNode
-        self.BCT = BCT
         self.prop = properties
         self.ts_size = ts_size
 
@@ -100,11 +98,11 @@ class DistGrid(aiomas.Agent):
             await asyncio.gather(*futs)
             futs = [sub[0].get_T('T_out') for sub in self.substations]
             TBC = await asyncio.gather(*futs)
-            T_in= np.ones(self.graph.order()) * self.prop['init']['T_utenza_in']
+            T_in= np.ones(len(self.netdata['A'])) * self.prop['init']['T_utenza_in']
             for el in TBC:
                 T_in[el[0]] = el[1]
             self.temperatures['mandata'].append(T_in)
-            T_in_ret = np.ones(self.graph.order()) * self.prop['init']['T_in_ritorno']
+            T_in_ret = np.ones(len(self.netdata['A'])) * self.prop['init']['T_in_ritorno']
             self.temperatures['ritorno'].append(T_in_ret)
 
         #calcolo portate per istante t EQUAZIONE DI CONTINUITA'
@@ -112,7 +110,7 @@ class DistGrid(aiomas.Agent):
         G_ut = await asyncio.gather(*futs) #iterable of tuples with utenza_id and Portata in ingresso
         G_ext = self.create_Gext(G_ut) # vettore NNx1 con le portate di utenze e -sum(all) per TBC
         G = self.eq_continuità(G_ext)
-        futs = [sub[0].set_G('G_out', G_ext[i]) for sub, i in zip(self.substations, self.BCT)]
+        futs = [sub[0].set_G('G_out', G_ext[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
         await asyncio.gather(*futs)
 
         #richiesta temperatura mandata sottostazioni
@@ -131,10 +129,10 @@ class DistGrid(aiomas.Agent):
 
         #update utenze e substation con le temperature calcolate
         #
-        futs = [ut[0].set_T('T_in',T_res[i]) for ut,i in zip(self.utenze,self.UserNode)]
+        futs = [ut[0].set_T('T_in',T_res[i]) for ut,i in zip(self.utenze,self.netdata['UserNode'])]
         await asyncio.gather(*futs)
         #todo l'update delle T_out di substation non dovrebbe servire fai check
-        futs = [sub[0].set_T('T_out', T_res[i]) for sub, i in zip(self.substations, self.BCT)]
+        futs = [sub[0].set_T('T_out', T_res[i]) for sub, i in zip(self.substations, self.netdata['BCT'])]
         await asyncio.gather(*futs)
 
 
@@ -171,34 +169,23 @@ class DistGrid(aiomas.Agent):
 
     def create_Gext(self, G_ut):
         #TODO non ho fatto i nodi multipli ricorda!!!
-        G_ext = np.zeros(self.graph.order())
+        G_ext = np.zeros(len(self.netdata['A']))
         for el in G_ut: G_ext[el[0]]=el[1]
         G_BCT = np.sum(G_ext)*-1
         #in caso ci siano più sottopstazioni (ognuna contribuisce ugualmente alla portata)
         if len(self.substations)>1:
             G_sub = G_BCT/len(self.substations)
-            for id in self.BCT: G_ext[id]= G_sub
+            for id in self.netdata['BCT']: G_ext[id]= G_sub
         else:
-            G_ext[self.BCT[0]]= G_BCT
+            G_ext[self.netdata['BCT'][0]]= G_BCT
         return G_ext
 
     def eq_continuità(self,G_ext):
         ''' this function solves the linear system to calculate flows in the branches
         and makes the G vector positive'''
-        Ix = self.get_incidence_matrix()
-        G = np.linalg.lstsq(Ix,G_ext,1.e-10)[0] # solving and rounding
+        G = np.linalg.lstsq(-self.netdata['A'],G_ext,1.e-10)[0] # solving and rounding
         G[G<0]=G[G<0]*-1 #making it positive
         return G
-
-    def get_incidence_matrix(self):
-        #todo use sparse maybe better...
-        node_list = sorted(list(self.graph.nodes), key=lambda x: int(x.split('_')[0]))
-        edge_list = sorted(self.graph.edges(data=True), key=lambda t: t[2].get('NB', 1))
-        graph_matrix = nx.incidence_matrix(self.graph, nodelist=node_list, edgelist=edge_list,
-                                           oriented=True).todense().astype(int)
-        graph_matrix = np.array(graph_matrix)
-        return graph_matrix
-
 
     def create_matrices(self,G,G_ext,T,dir):
         ''' la T sta per T immissione e può essere o quella delle utenze o quella delle BCT
