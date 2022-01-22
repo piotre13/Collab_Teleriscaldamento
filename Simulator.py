@@ -5,9 +5,10 @@ import multiprocessing
 import sys
 import pickle
 
-#TODO TEST with interpolated data 2156 ts
+# TODO TEST with interpolated data 2156 ts
 
-class Simulator():
+class Simulator(object):
+
 
     def __init__(self, config):
         #paths
@@ -27,7 +28,7 @@ class Simulator():
         self.py_int = self.paths['py_interpreter']
 
         # knowledge of the system
-        grid_num = config['num_Grids']
+        self.scenario = None
         self.properties = config['properties']
         self.grids = []
 
@@ -40,7 +41,7 @@ class Simulator():
 
         #creating the scenario and the agents
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.create(grid_num))
+        loop.run_until_complete(self.create())
         #await self.create(grid_num) # it creates the agents at the class instantiation
 
 
@@ -110,31 +111,29 @@ class Simulator():
         return (print('simul SUCCESSFULLY ended!'))
         # **********************************
 
-    def report(self, reports):
-        '''reports is a list for each grid created that contains all reporting data...
-        this function saves the pickle to be used for analysis'''
-        with open('Final_reports.pickle', 'wb') as handle:
-            pickle.dump(reports, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        handle.close()
-    async def create(self,NUM=None):
+
+
+    async def create(self):
         #main container start todo check if is needed
         self.main_container = await aiomas.Container.create((self.host, self.port), as_coro=True, clock=self.clock, codec=aiomas.MsgPackBlosc, extra_serializers=[util.get_np_serializer])
         #start subcontainers
         self.sub_containers = await self.start_sub_containers()  # >> list of tuples (process, container_proxy)
-        #create N dist grid with all the related componentsAgents
-        #two possibilities:
-        # use the NETdata from a series of mat files when num is not specified
-        if not NUM:
-            pass
-            #create starting from the directory files
-        else:
-            #create replicates of grid
-            netdata = util.read_data(self.paths['grid_data'])
-            # create D_ext
-            netdata['D_ext'] = netdata['D'] * self.properties['branches']['D_ext']['c1'] + 2 *  self.properties['branches']['D_ext']['c2']
-            inputdata = util.read_data(self.paths['input_data'])
-            for i in range (NUM):
-                await self.create_distGrid(i, netdata, inputdata)
+
+        #read pickle scenario file
+        with open(self.paths['grid_data'], 'rb') as f:
+            self.scenario = pickle.load(f)
+            f.close()
+
+        transp_list = [i for i in self.scenario.keys() if 'transp' in i]
+        dist_list = [i for i in self.scenario.keys() if 'dist' in i]
+        inputdata = util.read_data(self.paths['input_data'])
+        netdata =  util.read_data(self.paths['net_data'])
+        UserNode = netdata['UserNode']
+        BCT = netdata['BCT']
+        #CREATING
+        #await self.create_transpGrid(transp_list, UserNode, BCT, inputdata) # creating the transport grid
+        await self.create_distGrid(dist_list, UserNode, BCT, inputdata) # TODO the dist grid must register to the transp grid
+        print('CREATION of AGENTS successfully completed!\n')
 
 
 
@@ -167,17 +166,36 @@ class Simulator():
         # Return a list of "(proc, container_proxy)" tuples:
         return [(p, c) for p, c in zip(procs, containers)]
 
+    async def create_transpGrid(self, transp_list, inputdata):
+        for net_name in transp_list:
+            num = int(net_name[-1])
+            container = self.sub_containers[num % len(self.sub_containers)][1]
+            # this will return a proxy object to aggr agent and its address
+            # and trigger the create @classmethod in DistGrid_agent
+            proxy, address = await container.spawn(
+                'mas.DistributionGrid:DistGrid.create', net_name, num, self.scenario[net_name], inputdata,
+                self.properties, self.ts_size)
+            self.grids.append((proxy, address))
 
-    async def create_distGrid(self, num, netdata, inputdata):
-        entities = []
-        name = 'DistGrid_%s'%num
-        container = self.sub_containers[num % len(self.sub_containers)][1]
-        # this will return a proxy object to aggr agent and its address
-        # and trigger the create @classmethod in DistGrid_agent
-        proxy, address = await container.spawn(
-            'mas.DistributionGrid:DistGrid.create', name, num, netdata, inputdata, self.properties, self.ts_size )
-        self.grids.append((proxy, address))
+    async def create_distGrid(self, dist_list, UserNode, BCT, inputdata):
+
+        for net_name in dist_list:
+            num = int(net_name[-1])
+            container = self.sub_containers[num % len(self.sub_containers)][1]
+            # this will return a proxy object to aggr agent and its address
+            # and trigger the create @classmethod in DistGrid_agent
+            proxy, address = await container.spawn(
+                'mas.DistributionGrid:DistGrid.create', net_name,self.paths['grid_data'], num, UserNode, BCT, inputdata, self.properties, self.ts_size )
+            self.grids.append((proxy, address))
+
         return
+
+    def report(self, reports):
+        '''reports is a list for each grid created that contains all reporting data...
+        this function saves the pickle to be used for analysis'''
+        with open('Final_reports.pickle', 'wb') as handle:
+            pickle.dump(reports, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        handle.close()
 
     async def finalize(self):
         # Stop all agents and sub-processes and wait for them to terminate.

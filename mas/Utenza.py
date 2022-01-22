@@ -4,16 +4,16 @@ import numpy as np
 
 #TODO APPEND TO HISTORY FIND THE BEST PLACE
 class Utenza(aiomas.Agent):
-    def __init__(self, container, name, uid, netdata, inputdata, properties, ts_size):
+    def __init__(self, container, name, uid, UserNode, BCT, inputdata, properties, ts_size):
         super().__init__(container)
         #params
         self.name = name
         self.uid = int(uid) #the node number in the whole grid
-        self.index = np.where(netdata['UserNode']== uid)# the index of the node in the UserNode vector and Gdata and P_req
+        self.index = np.where(UserNode== uid)# the index of the node in the UserNode vector and Gdata and P_req
         #nb self.index to be used in indata while sel.uid to be used in netdata in the grid
 
         #data
-        self.netdata = netdata
+
         self.inputdata = inputdata
         self.ts_size = ts_size
         self.properties = properties
@@ -31,9 +31,9 @@ class Utenza(aiomas.Agent):
 
 
     @classmethod
-    async def create(cls, container,  name, uid, netdata, inputdata, properties, ts_size):
+    async def create(cls, container,  name, uid, UserNode, BCT, inputdata, properties, ts_size):
 
-        utenza = cls(container, name, uid, netdata, inputdata, properties, ts_size)
+        utenza = cls(container, name, uid, UserNode, BCT, inputdata, properties, ts_size)
         print('Created Utenza Agent: %s'%name)
 
         return utenza

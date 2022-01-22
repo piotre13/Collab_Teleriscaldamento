@@ -3,6 +3,7 @@ import arrow
 import click
 from mat4py import loadmat
 import numpy as np
+import networkx as nx
 
 
 def get_container_kwargs(start_date):
@@ -14,7 +15,7 @@ def get_container_kwargs(start_date):
 	return {
 		'clock': aiomas.ExternalClock(start_date, init_time=0),
 		'codec': aiomas.MsgPackBlosc,
-		'extra_serializers':[get_np_serializer],
+		'extra_serializers':[get_np_serializer, get_graphs_serializer],
 	}
 
 
@@ -70,8 +71,18 @@ def _serialize_ndarray(obj):
 	   #'data': obj.tobytes(),
    }
 
-
 def _deserialize_ndarray(obj):
    array = np.fromstring(obj['data'], dtype=np.dtype(obj['type']))
    #array = np.frombuffer(obj['data'], dtype=np.dtype(obj['type']))
    return array.reshape(obj['shape'])
+
+def get_graphs_serializer():
+	return nx.classes.digraph.DiGraph, _serialize_graphs, _deserialize_graphs
+
+def _serialize_graphs(obj):
+
+	return {'type': obj.dtype.str,
+			'data': nx.cytoscape_data(obj)}
+
+def _deserialize_graphs(obj):
+	return nx.cytoscape_graph(obj['data'])

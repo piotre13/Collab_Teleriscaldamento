@@ -1,16 +1,17 @@
 import aiomas
 import time
+
 #TODO APPEND TO HISTORY FIND THE BEST PLACE
 
 class Sottostazione(aiomas.Agent):
-    def __init__(self, container, name, sid, netdata, inputdata, properties, ts_size):
+    def __init__(self, container, name, sid, graph, UserNode, BCT, inputdata, properties, ts_size):
         super().__init__(container)
 
         # params
         self.name = name
         self.sid = int(sid)
         #knowledge of the system
-        self.netdata = netdata
+        self.graph = graph
         self.inputdata = inputdata
         self.ts_size = ts_size
         self.properties = properties
@@ -28,9 +29,9 @@ class Sottostazione(aiomas.Agent):
                         }
 
     @classmethod
-    async def create(cls, container, name, sid, netdata, inputdata, properties, ts_size):
+    async def create(cls, container, name, sid, graph, UserNode, BCT, inputdata, properties, ts_size):
 
-        sottostazione = cls(container,name, sid, netdata, inputdata, properties, ts_size)
+        sottostazione = cls(container,name, sid, graph, UserNode, BCT, inputdata, properties, ts_size)
         print('Created Sottostazione Agent: %s'%name)
 
         return sottostazione
@@ -40,6 +41,7 @@ class Sottostazione(aiomas.Agent):
         #TODO check signs and equation
         self.P = self.G['G_out']*self.properties['cpw'] * (self.T['T_out']-self.T['T_in'])
         self.history['P'].append(self.P)
+
 
 
     @aiomas.expose

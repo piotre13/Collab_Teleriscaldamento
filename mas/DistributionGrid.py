@@ -6,78 +6,80 @@ import math
 import scipy.sparse as sp
 import matplotlib.pyplot as plt
 from scipy.sparse import linalg as lng
-
+import pickle
 from pyvis.network import Network
 
 
 class DistGrid(aiomas.Agent):
-    def __init__(self, container, name, rid, netdata, inputdata, properties, ts_size):
+    def __init__(self, container, net_name,scenario, num, UserNode, BCT, inputdata, properties, ts_size):
         super().__init__(container)
         #univocal agent information
-        self.name = name
-        self.rid = rid
+        self.name = net_name
+        self.rid = num
 
         #knowledge of the system
-        self.netdata = netdata
-        self.inputdata= inputdata
+
+
+        self.graph = scenario
+        self.inputdata = inputdata
         self.prop = properties
         self.ts_size = ts_size
 
-        #graph testing
-        self.graph = self.incidence2graph()
-        # net = Network()
-        # net.from_nx(self.graph)
-        # net.show_buttons()
-        # net.show('data/grid.html')
-
-        #dir=nx.is_directed(self.graph)
-
 
         self.node_attr = {}
+
         #children agents aiomas
         self.substations = []
         self.subs_names = []
         self.utenze = []
         self.uts_names = []
 
-        self.temperatures = {'mandata':[],
-                             'ritorno': [] }
+        self.temperatures = {'mandata': [],
+                             'ritorno': []}
 
 
     @classmethod
-    async def create(cls, container, name, rid, netdata, inputdata, properties, ts_size):
+    async def create(cls, container, net_name, net_path, num, UserNode, BCT, inputdata, properties, ts_size):
         # W __init__ cannot be a coroutine
         # and creating init *tasks* init __init__ on whose results other
         # coroutines depend is bad style, so we better to all that stuff
         # before we create the instance and then have a fully initialized instance.
-        grid = cls(container, name, rid, netdata, inputdata, properties, ts_size)
-        print('Created Dist Grid Agent : %s'%name)
-        await grid.create_substations()
-        await grid.create_utenze()
-        #part for graph testing ignore
+        with open (net_path,'rb') as f :
+            scenario = pickle.load(f)
+            f.close()
+        scenario = scenario[net_name]
+        #scenario= None
+        grid = cls(container, net_name, scenario,  num, UserNode, BCT, inputdata, properties, ts_size)
+        print('Created Dist Grid Agent : %s'%net_name)
+
+        #CREATING THE BCT AND UTENZE
+        await grid.create_substations(UserNode, BCT)
+        #await grid.create_utenze(UserNode, BCT)
 
         return grid
 
-    async def create_substations(self):
-        for i in range (len(self.netdata['BCT'])):
-            sid = self.netdata['BCT'][i]
-            name = self.name+'_Sub_'+str(sid)
+    async def create_substations(self, UserNode, BCT_index):
+        BCT_list = [x for x,y in self.graph.nodes(data=True) if y['type']=='BCT']
+        for BCT in BCT_list:
+            sid = int(BCT.split('_')[0])
+            name = self.name+'_BCT_'+str(sid)
             self.subs_names.append(name)
             proxy, address = await self.container.agents.dict['0'].spawn(
-                'mas.Sottostazione:Sottostazione.create', name, sid, self.netdata, self.inputdata, self.prop, self.ts_size)
+                'mas.Sottostazione:Sottostazione.create', name, sid, self.graph, UserNode, BCT_index, self.inputdata, self.prop, self.ts_size)
             proxy = await self.container.connect(address)
             self.substations.append((proxy, address))
             self.node_attr[sid] = {}
             self.node_attr[sid]['name'] = name
 
 
-    async def create_utenze(self):
-        for i in range (len(self.netdata['UserNode'])):
-            uid = self.netdata['UserNode'][i]
+    async def create_utenze(self, UserNode, BCT):
+        Utenze_list = [x for x,y in self.graph.nodes(data=True) if y['type']=='Utenza']
+        for Utenza in Utenze_list:
+            uid = int(Utenza.split('_')[0])
             name = self.name+'_Ut_'+str(uid)
             self.uts_names.append(name)
             proxy, address = await self.container.agents.dict['0'].spawn(
-                'mas.Utenza:Utenza.create', name, uid, self.netdata, self.inputdata, self.prop, self.ts_size)
+                'mas.Utenza:Utenza.create', name, uid, UserNode, BCT, self.inputdata, self.prop, self.ts_size)
             #proxy = await self.container.connect(address)
             self.utenze.append((proxy, address))
             self.node_attr[uid] = {}
@@ -325,42 +327,6 @@ class DistGrid(aiomas.Agent):
         data['utenze'] = reports_ut
         return data
 
-
-    def incidence2graph(self):
-
-        G = nx.Graph()
-        n = 0
-        for column in self.netdata['A'].T:
-            i = np.where(column > 0)[0]
-            j = np.where(column < 0)[0]
-            G.add_edge(int(i[0]), int(j[0]), lenght=self.netdata['L'][n], D=self.netdata['D'][n], NB=n)
-            n+=1
-        DiG = nx.DiGraph()
-        # this only works with one substation must be updated for more than une substation
-        for sub in self.netdata['BCT']:
-            for utenza in self.netdata['UserNode']:
-                path = nx.shortest_path(G, sub, utenza, 'lenght')
-                for i in range(len(path) - 1):
-                    # ed = (path[i],path[i+1])
-                    attr = G.get_edge_data(int(path[i]), int(path[i + 1]))
-                    DiG.add_edge(int(path[i]), int(path[i + 1]), **attr)
-
-        remaining_nodes = set(G.nodes) - set(DiG.nodes)
-
-        for n in remaining_nodes:
-            ed = G.edges(n)
-            for e in ed:
-                attr = G.get_edge_data(*e)
-                e = list(e)
-                e.remove(n)
-                DiG.add_edge(e[0], n, **attr)
-
-        #drawing the graph and saving image comment when running
-        #.draw(DiG)
-        #plt.savefig('graph_image.png')
-
-
-        return DiG
 
     def check (self,M, K, f):
         from mat4py import loadmat
