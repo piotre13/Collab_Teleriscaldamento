@@ -109,7 +109,7 @@ def synthetic_whole_grid (base_graph, n_dist, n_gen=1):
         mapping[edge] = data
 
 
-    #adding the distribution grids to the whole graph
+    #adding the distribution distgrids to the whole graph
     for n in range(n_dist):
         prefix = '_dist_%s'%n
         mapping = {}

@@ -5,23 +5,31 @@ import pickle
 #TODO APPEND TO HISTORY FIND THE BEST PLACE
 
 class Sottostazione(aiomas.Agent):
-    def __init__(self, container, name, sid, graph, UserNode, BCT, inputdata, properties, ts_size):
+    def __init__(self, container, name,sid, node_attr, properties, ts_size, transp):
         super().__init__(container)
 
-        # params
+        #params/info/input
+        self.transp = transp #proxy of tranport grid agent
         self.name = name
-        self.sid = int(sid)
-        #knowledge of the system
-        self.graph = graph
-        self.inputdata = inputdata
+        self.sid = sid # taken from name
+        self.attr = node_attr
         self.ts_size = ts_size
         self.properties = properties
-        # data
-        self.T = {'T_in': None,
+
+        # data direzione rete di distribuzione
+        self.T_dist = {'T_in': None,
                   'T_out': None}
-        self.G = {'G_in': None,
+        self.G_dist = {'G_in': None,
                   'G_out': None}
-        self.P = []
+        self.P = [] #no losses so the power to dist and the power from transp are the same
+
+        #data direzione rete di trasporto
+        self.T_transp = {'T_in': None,
+                       'T_out': None}
+        self.G_transp = {'G_in': None,
+                       'G_out': None}
+
+        #reporting
         self.history = {'T_in': [],
                         'T_out': [],
                         'G_in': [],
@@ -30,36 +38,36 @@ class Sottostazione(aiomas.Agent):
                         }
 
     @classmethod
-    async def create(cls, container, name, sid, net_path, UserNode, BCT, inputdata, properties, ts_size):
+    async def create(cls, container, name,sid, node_attr, properties, ts_size, transp_addr):
         #NB this accrocco does not allow to use on different machines should be avoided creating a proper serializer for grphs
-        with open (net_path,'rb') as f :
-            scenario = pickle.load(f)
-            graph = scenario[name.split('_')[0]+'_'+name.split('_')[1]]
-            f.close()
-        sottostazione = cls(container,name, sid, graph, UserNode, BCT, inputdata, properties, ts_size)
+
+        transp = await container.connect(transp_addr)
+        sottostazione = cls(container,name,sid, node_attr, properties, ts_size, transp)
         print('Created Sottostazione Agent: %s'%name)
 
+        #registering
+        await transp.register(sottostazione.addr, sottostazione.name, 'BCT')
         return sottostazione
 
     @aiomas.expose
     async def calc_P(self):
         #TODO check signs and equation
-        self.P = self.G['G_out']*self.properties['cpw'] * (self.T['T_out']-self.T['T_in'])
+        self.P = self.G_dist['G_out']*self.properties['cpw'] * (self.T_dist['T_out']-self.T_dist['T_in'])
         self.history['P'].append(self.P)
 
 
 
     @aiomas.expose
     async def get_G(self, key):
-        return self.G[key]
+        return self.G_dist[key]
 
     @aiomas.expose
     async def get_T(self, key, ts=None):
         if not ts:
-            self.T[key] = self.properties['init']['TBC']
+            self.T_dist[key] = self.properties['init']['TBC']
             return (self.sid ,self.T[key])
         else:
-            return (self.Sid,self.history['T'][key][ts])
+            return (self.sid,self.history['T'][key][ts])
 
 
     @aiomas.expose
@@ -69,7 +77,7 @@ class Sottostazione(aiomas.Agent):
     @aiomas.expose
     async def set_T(self,key, T):
         #print('setting T_in of sottostazione%s at time: %s'%(self.sid,str(self.container.clock.time()/self.ts_size)))
-        self.T[key] = T
+        self.T_dist[key] = T
         self.history[key].append(T)
 
     @aiomas.expose
@@ -78,7 +86,7 @@ class Sottostazione(aiomas.Agent):
 
     @aiomas.expose
     async def set_G(self, key, G):
-        self.G[key] = G
+        self.G_dist[key] = G
         self.history[key].append(G)
 
     @aiomas.expose

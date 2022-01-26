@@ -30,7 +30,8 @@ class Simulator(object):
         # knowledge of the system
         self.scenario = None
         self.properties = config['properties']
-        self.grids = []
+        self.distgrids = []
+        self.transp_grids =[]
 
         # containers proxy
         self.main_container = None
@@ -79,8 +80,8 @@ class Simulator(object):
 
             # testing try block
             try:
-                futs = [grid[0].step() for grid in self.grids]
-                await asyncio.gather(*futs) # making the step for all the grids mandata + ritorno
+                futs = [grid[0].step() for grid in self.distgrids]
+                await asyncio.gather(*futs) # making the step for all the distgrids mandata + ritorno
 
             except Exception as e:
                 await self.finalize()
@@ -103,7 +104,7 @@ class Simulator(object):
 
         # *********** FINALIZE condition #when outside the loop
         #TODO make a good report and final check if its working
-        futs = [grid[0].reporting() for grid in self.grids]
+        futs = [grid[0].reporting() for grid in self.distgrids]
         reports_grids = await asyncio.gather(*futs)
         self.report((reports_grids))
         #this data is a list for each dist grid with dict cpontaining info of substations and utenze
@@ -130,23 +131,23 @@ class Simulator(object):
         netdata =  util.read_data(self.paths['net_data'])
         UserNode = netdata['UserNode']
         BCT = netdata['BCT']
-        #CREATING #todo create the transport grid
-        #await self.create_transpGrid(transp_list, UserNode, BCT, inputdata) # creating the transport grid
-        #must return an address of the transp grid and pass it to dist grid to register
-        await self.create_distGrid(dist_list, UserNode, BCT, inputdata) # TODO the dist grid must register to the transp grid
+
+        #CREATING
+        transp_addr = await self.create_transpGrid(transp_list) # creating the transport grid
+        await self.create_distGrid(dist_list, UserNode, BCT, inputdata, transp_addr) # TODO the dist grid must register to the transp grid
         print('CREATION of AGENTS successfully completed!\n')
 
 
 
     async def start_sub_containers(self):
+        ''' This function starts a container for each on eof the machine cores.
+        it returns a list of tuples containing the containers info (proc,container)'''
         addrs = []  # Container addresses
         procs = []  # Subprocess instances
-
         for i in range(multiprocessing.cpu_count()):
             # We define a network address for the new container, ...
             addr = (self.host, int(self.port + i + 1))
             addrs.append('tcp://%s:%s/0' % addr)
-
             # NB the python path is the one of the environment
             cmd = [
                 sys.executable,
@@ -156,40 +157,42 @@ class Simulator(object):
             ]
             # ... We finally create a task for starting the subprocess:
             procs.append(asyncio.create_subprocess_exec(*cmd))
-
         # Start all processes and connect to them.  Since it may take a while
         # until a process is listening on its socket, we use a timeout of 10s
         # in the "connect()" call.
         procs = await asyncio.gather(*procs)
         futs = [self.main_container.connect(a, timeout=10) for a in addrs]
         containers = await asyncio.gather(*futs)
-
         # Return a list of "(proc, container_proxy)" tuples:
         return [(p, c) for p, c in zip(procs, containers)]
 
-    async def create_transpGrid(self, transp_list, inputdata):
+    async def create_transpGrid(self, transp_list):
+        '''This function creates as many transmission grid agents as many item are present in transp_list
+        usually is only one. Each one of the agents created is assigned to a specific subcontainer and spawned '''
+        num = 0
         for net_name in transp_list:
-            num = int(net_name[-1])
             container = self.sub_containers[num % len(self.sub_containers)][1]
             # this will return a proxy object to aggr agent and its address
             # and trigger the create @classmethod in DistGrid_agent
             proxy, address = await container.spawn(
-                'mas.DistributionGrid:DistGrid.create', net_name, num, self.scenario[net_name], inputdata,
-                self.properties, self.ts_size)
-            self.grids.append((proxy, address))
+                'mas.TransportGrid:TranspGrid.create', net_name,self.paths['grid_data'], num, self.properties, self.ts_size )
+            self.transp_grids.append((proxy, address))
+            num+=1
+        return address
 
-    async def create_distGrid(self, dist_list, UserNode, BCT, inputdata):
-
+    async def create_distGrid(self, dist_list, UserNode, BCT, inputdata, transp_addr):
+        '''This function creates as many distribution grid agents as many item are present in transp_list
+             Each one of the agents created is assigned to a specific subcontainer and spawned '''
+        num = 0 #TODO ensure that num coincides with the num in the net_name
         for net_name in dist_list:
-            num = int(net_name[-1])
             container = self.sub_containers[num % len(self.sub_containers)][1]
             # this will return a proxy object to aggr agent and its address
             # and trigger the create @classmethod in DistGrid_agent
             proxy, address = await container.spawn(
-                'mas.DistributionGrid:DistGrid.create', net_name,self.paths['grid_data'], num, UserNode, BCT, inputdata, self.properties, self.ts_size )
-            self.grids.append((proxy, address))
+                'mas.DistributionGrid:DistGrid.create', net_name,self.paths['grid_data'], num, UserNode, BCT, inputdata, self.properties, self.ts_size, transp_addr)
+            self.distgrids.append((proxy, address))
+            num+=1
 
-        return
 
     def report(self, reports):
         '''reports is a list for each grid created that contains all reporting data...

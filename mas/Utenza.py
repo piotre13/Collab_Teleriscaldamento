@@ -4,24 +4,27 @@ import numpy as np
 
 #TODO APPEND TO HISTORY FIND THE BEST PLACE
 class Utenza(aiomas.Agent):
-    def __init__(self, container, name, uid, UserNode, BCT, inputdata, properties, ts_size):
+    def __init__(self, container, name, uid, node_attr, UserNode,  inputdata, properties, ts_size):
         super().__init__(container)
-        #params
+
+        #params/info/input
         self.name = name
-        self.uid = int(uid) #the node number in the whole grid
-        self.index = np.where(UserNode== uid)# the index of the node in the UserNode vector and Gdata and P_req
-        #nb self.index to be used in indata while sel.uid to be used in netdata in the grid
-
-        #data
-
+        self.uid = uid #take this from the name
+        self.index_input = np.where(UserNode == self.uid)# the index_input of the node in the UserNode vector and Gdata and P_req
+        self.attr = node_attr
+        #nb self.index_input to be used in indata while sel.uid to be used in netdata in the grid
         self.inputdata = inputdata
         self.ts_size = ts_size
         self.properties = properties
+
+        #data
         self.T = {'T_in':None,
                   'T_out':None}
         self.G = {'G_in':None,
                   'G_out':None}
         self.P_req = None
+
+        #report
         self.history = {'T_in':[],
                         'T_out':[],
                         'G_in':[],
@@ -31,9 +34,9 @@ class Utenza(aiomas.Agent):
 
 
     @classmethod
-    async def create(cls, container,  name, uid, UserNode, BCT, inputdata, properties, ts_size):
+    async def create(cls, container,  name, uid, node_attr, UserNode, inputdata, properties, ts_size):
 
-        utenza = cls(container, name, uid, UserNode, BCT, inputdata, properties, ts_size)
+        utenza = cls(container, name, uid, node_attr, UserNode, inputdata, properties, ts_size)
         print('Created Utenza Agent: %s'%name)
 
         return utenza
@@ -42,7 +45,7 @@ class Utenza(aiomas.Agent):
     def calc_G(self,key):
         '''here we only read a csv but in future could be present a model to evaluate the requested G'''
         if key == 'G_in':
-            row = self.index # the ith utenza
+            row = self.index_input # the ith utenza
             column = divmod(self.container.clock.time(), self.ts_size)[0]# the jth timestep
             G = float(self.inputdata['Gdata'][row,column][0,0])
             #update the state G
@@ -60,7 +63,7 @@ class Utenza(aiomas.Agent):
     def calc_P(self):
         '''here we only read a csv but in future could be present a model to evaluate the requested P'''
 
-        row = self.index # the ith utenza
+        row = self.index_input # the ith utenza
         column = divmod(self.container.clock.time(), self.ts_size)[0]# the jth timestep
         P = float(self.inputdata['P_req'][row,column][0,0])
         #update the state G
