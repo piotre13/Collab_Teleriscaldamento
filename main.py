@@ -31,9 +31,9 @@ def main():
     finally:
 
         # Sim.shutdown()
-        t1 = time.time()
-        print('total time %f' % (t1 - t0))
-        print('simulation time: %f' %(ts1-ts0) )
+        #t1 = time.time()
+        #print('total time %f' % (t1 - t0))
+        #print('simulation time: %f' %(ts1-ts0) )
         print('done')
         #close everything
 

@@ -43,9 +43,6 @@ class Simulator(object):
         #creating the scenario and the agents
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.create())
-        #await self.create(grid_num) # it creates the agents at the class instantiation
-
-
 
 
     async def clock_setter(self):
@@ -62,57 +59,6 @@ class Simulator(object):
             await self.finalize()
             print('Error in the setting of time!')
             print(e)
-
-    #@profile
-    async def run(self):
-        '''
-        main simulation function is the run of all the simulation contains a while loop
-        that is the main loop
-        '''
-
-        # ************** SIMULATION LOOP ***************************
-
-        while self.clock.time() < (self.duration * self.ts_size):
-
-            #print('===================')
-            #print('start iteration %i ' % (self.clock.time() / self.ts_size), 'at timestamp:%i' % self.clock.time())
-            #print(self.clock.utcnow().format('YYYY-MM-DD HH:mm:ss ZZ'))
-
-            # testing try block
-            try:
-                futs = [grid[0].step() for grid in self.distgrids]
-                await asyncio.gather(*futs) # making the step for all the distgrids mandata + ritorno
-
-            except Exception as e:
-                await self.finalize()
-                print('inside the LOOP!')
-                print(e)
-                return (print('simul ended!'))
-
-            # ********* END ITERATION
-            self.cycle_done.set_result(None)
-            await self.clock_setter() # update the timestep for both main container and sub containers
-            #print('====================')
-
-
-            # ********** REPORTING CONDITION EVERY 24 H
-            if self.clock.time() % (86400) == 0: # these are the second in a day
-                pass
-
-            self.cycle_done = asyncio.Future()  # ripristino il fUTURE
-
-
-        # *********** FINALIZE condition #when outside the loop
-        #TODO make a good report and final check if its working
-        futs = [grid[0].reporting() for grid in self.distgrids]
-        reports_grids = await asyncio.gather(*futs)
-        self.report((reports_grids))
-        #this data is a list for each dist grid with dict cpontaining info of substations and utenze
-        await self.finalize()
-        return (print('simul SUCCESSFULLY ended!'))
-        # **********************************
-
-
 
     async def create(self):
         #main container start todo check if is needed
@@ -136,8 +82,6 @@ class Simulator(object):
         transp_addr = await self.create_transpGrid(transp_list) # creating the transport grid
         await self.create_distGrid(dist_list, UserNode, BCT, inputdata, transp_addr) # TODO the dist grid must register to the transp grid
         print('CREATION of AGENTS successfully completed!\n')
-
-
 
     async def start_sub_containers(self):
         ''' This function starts a container for each on eof the machine cores.
@@ -192,6 +136,59 @@ class Simulator(object):
                 'mas.DistributionGrid:DistGrid.create', net_name,self.paths['grid_data'], num, UserNode, BCT, inputdata, self.properties, self.ts_size, transp_addr)
             self.distgrids.append((proxy, address))
             num+=1
+
+    #@profile
+    async def run(self):
+        '''
+        This is the main simulation function that contains the main simulation loop
+        it is run by aiomas until finished
+        '''
+
+        # ************** SIMULATION LOOP ***************************
+
+        while self.clock.time() < (self.duration * self.ts_size):
+
+            #print('===================')
+            #print('start iteration %i ' % (self.clock.time() / self.ts_size), 'at timestamp:%i' % self.clock.time())
+            #print(self.clock.utcnow().format('YYYY-MM-DD HH:mm:ss ZZ'))
+
+            # testing try block
+            try:
+                #FIRST stepping the distribution grids
+                futs = [grid[0].step() for grid in self.distgrids]
+                await asyncio.gather(*futs) # making the step for all the distgrids mandata + ritorno
+                #SECOND stepping the transport grid
+                futs = [grid[0].step() for grid in self.transp_grids]
+                await asyncio.gather(*futs)
+
+            except Exception as e:
+                await self.finalize()
+                print('inside the LOOP!')
+                print(e)
+                return (print('simul ended!'))
+
+            # ********* END ITERATION
+            self.cycle_done.set_result(None)
+            await self.clock_setter() # update the timestep for both main container and sub containers
+            #print('====================')
+
+
+            # ********** REPORTING CONDITION EVERY 24 H
+            if self.clock.time() % (86400) == 0: # these are the second in a day
+                pass
+
+            self.cycle_done = asyncio.Future()  # ripristino il fUTURE
+
+
+        # *********** FINALIZE condition #when outside the loop
+        #TODO make a good report and final check if its working
+        futs = [grid[0].reporting() for grid in self.distgrids]
+        reports_grids = await asyncio.gather(*futs)
+        self.report((reports_grids))
+        #this data is a list for each dist grid with dict cpontaining info of substations and utenze
+        await self.finalize()
+        return (print('simul SUCCESSFULLY ended!'))
+        # **********************************
 
 
     def report(self, reports):

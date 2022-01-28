@@ -111,10 +111,10 @@ def synthetic_whole_grid (base_graph, n_dist, n_gen=1):
 
     #adding the distribution distgrids to the whole graph
     for n in range(n_dist):
-        prefix = '_dist_%s'%n
+        prefix = 'dist_%s_'%n
         mapping = {}
-        for node in base_graph.nodes:
-            mapping[node] = str(node)+prefix # creating the mapping for relabelling
+        for node, type in base_graph.nodes(data='type'):
+            mapping[node] = prefix+str(type)+'_'+str(node) # creating the mapping for relabelling
 
         dist_graph = nx.relabel_nodes(base_graph, mapping)
         #COMPOSING THE WHOLE NEW GRAPH WITH TRANSPORT AND DISTRIBUTION
@@ -138,6 +138,7 @@ def synthetic_whole_grid (base_graph, n_dist, n_gen=1):
     for BCT, free in zip(BCT_nodes,free_nodes):
         DiG.nodes[BCT]['connection'] = free
         DiG.nodes[free]['connection'] = BCT
+        DiG.nodes[free]['type'] = 'BCT'
 
     return DiG
 
@@ -150,7 +151,7 @@ def save_object(graph,scenario_name):
         if type(list(set)[0]) == int:
             scenario['transp'] = graph.subgraph(list(set)).copy()
         else:
-            name = list(set)[0][-6:]
+            name = list(set)[0][:6] #todo generalize when using duobledigits number for dist grids list(set)[0].split('_')[0] + '_' + list(set)[0].split('_')[1]
             scenario[name] = graph.subgraph(list(set)).copy()
     #save the pickle object of the scenario
     with open(scenario_name, 'wb') as handle:
@@ -160,7 +161,7 @@ def save_object(graph,scenario_name):
 
 
 if __name__ == '__main__':
-    net_data_path = '/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat'
+    net_data_path = '/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/NetData419.mat'
     NUM_dist = 5
     NUM_gen = 1
     scenario_name = 'CompleteNetwork_G%s_D%s'%(NUM_gen,NUM_dist)

@@ -31,9 +31,6 @@ class DistGrid(aiomas.Agent):
 
         self.ts_size = ts_size
 
-
-        self.node_attr = {}
-
         #children agents aiomas
         self.substations = []
         self.subs_names = []
@@ -74,9 +71,9 @@ class DistGrid(aiomas.Agent):
         BCT_list = [x for x,y in self.graph.nodes(data=True) if y['type']=='BCT']
 
         for BCT in BCT_list:
-            sid = int(BCT.split('_')[0])
+            sid = int(BCT.split('_')[-1])
             name = self.name+'_BCT_'+str(sid)
-            node_attr = nx.get_node_attributes(self.graph, BCT)
+            node_attr = self.graph.nodes[BCT]
 
             #TODO parm to pass: - name, -properties, -node_attr, transp_addr, -ts_size
             proxy, address = await self.container.agents.dict['0'].spawn(
@@ -88,17 +85,15 @@ class DistGrid(aiomas.Agent):
             # TODO this part could be done in register
             self.subs_names.append(name)
             self.substations.append((proxy, address))
-            self.node_attr[sid] = {}
-            self.node_attr[sid]['name'] = name
 
 
     async def create_utenze(self, UserNode):
         Utenze_list = [x for x,y in self.graph.nodes(data=True) if y['type']=='Utenza']
 
         for Utenza in Utenze_list:
-            uid = int(Utenza.split('_')[0])
+            uid = int(Utenza.split('_')[-1])
             name = self.name+'_Ut_'+str(uid)
-            node_attr = nx.get_node_attributes(self.graph, Utenza)
+            node_attr = self.graph.nodes[Utenza]
             # TODO parm to pass: - name, -inputdata, -userNode, -properties, -node_attr, -ts_size
             proxy, address = await self.container.agents.dict['0'].spawn(
                 'mas.Utenza:Utenza.create', name, uid, node_attr, UserNode, self.inputdata, self.prop, self.ts_size)
@@ -107,31 +102,28 @@ class DistGrid(aiomas.Agent):
             #TODO this part could be done in register
             self.uts_names.append(name)
             self.utenze.append((proxy, address))
-            self.node_attr[uid] = {}
-            self.node_attr[uid]['name'] = name
-
-    @aiomas.expose
-    async def register(self):
-        pass
 
 
     @aiomas.expose
     async def step (self):
         ts = int(self.container.clock.time() / self.ts_size)
-        #INITIALIZATION AT FIRST TIMESTEP
+
+        #INITIALIZATION AT FIRST TIMESTEP**********************************************************************
         if ts == 0:
             futs = [ut[0].set_T('T_in', self.prop['init']['T_utenza_in']) for ut in self.utenze]
             await asyncio.gather(*futs)
+
             futs = [sub[0].set_T('T_out', self.prop['init']['TBC']) for sub in self.substations]
             await asyncio.gather(*futs)
+
+            T_in = np.ones(self.graph.order()) * self.prop['init']['T_utenza_in']           # vector with all ne grid nodes and their Temperature during mandata
             futs = [sub[0].get_T('T_out') for sub in self.substations]
             TBC = await asyncio.gather(*futs)
-            T_in= np.ones(self.graph.order()) * self.prop['init']['T_utenza_in']
             for el in TBC:
                 T_in[el[0]] = el[1]
             self.temperatures['mandata'].append(T_in)
-            T_in_ret = np.ones(self.graph.order()) * self.prop['init']['T_in_ritorno']
-            self.temperatures['ritorno'].append(T_in_ret)
+
+        #******************************************************************************************************
 
         #calcolo portate per istante t EQUAZIONE DI CONTINUITA'
         futs = [ut[0].get_G('G_in') for ut in self.utenze]
@@ -144,30 +136,33 @@ class DistGrid(aiomas.Agent):
         #richiesta temperatura mandata sottostazioni
         futs = [sub[0].get_T('T_out') for sub in self.substations]
         TBC = await asyncio.gather(*futs)
-        T_in = TBC
 
         #calcolo delle matrici
         M, K, f = self.create_matrices(G,G_ext,TBC,'mandata')
-        #check matrices
-        #self.check(M,K,f)
 
         #conservazione dell'energia: calcolo delle temperature in tutti i nodi
         T_res = self.calc_temperatures(M,K,f, self.temperatures['mandata'][ts])
         self.temperatures['mandata'].append(T_res)
 
         #update utenze e substation con le temperature calcolate
-        #
         futs = [ut[0].set_T('T_in',T_res[i]) for ut,i in zip(self.utenze,self.UserNode)]
         await asyncio.gather(*futs)
-        #todo l'update delle T_out di substation non dovrebbe servire fai check
+
         futs = [sub[0].set_T('T_out', T_res[i]) for sub, i in zip(self.substations, self.BCT)]
         await asyncio.gather(*futs)
 
-
         #RITORNO**********************************************************************************************************
-        #calcolo delle temperature di uscita dalle utenze
+        #initialization ritorno ********************+
+        if ts == 0:
+            T_in_ret = np.ones(self.graph.order()) * self.prop['init']['T_in_ritorno']
+            self.temperatures['ritorno'].append(T_in_ret)
+        #**********************************************
+
+        #richiesta potenze da utenza (per ora solo lette da file)
         futs = [ut[0].get_P() for ut in self.utenze]
-        P = await asyncio.gather(*futs) #serve per update le potenze nelle utenze
+        P = await asyncio.gather(*futs) #serve per update le potenze nelle utenze #todo brutto non mi piace cambiare con calc() senza return
+
+        #calcolo delle temperaturew in uscita dalle utenze (usando la potenza)
         futs = [ut[0].get_T('T_out') for ut in self.utenze]
         T2 = await asyncio.gather(*futs)
         T_in = T2
@@ -177,28 +172,31 @@ class DistGrid(aiomas.Agent):
         G[G < 0] = G[G < 0] * -1
         G_ext = - G_ext
         G_ext[G_ext < 0] = G_ext[G_ext < 0] * -1
+
+        #setting portate nelle sottostazioni
         futs = [sub[0].set_G('G_in', G_ext[i]) for sub, i in zip(self.substations, self.BCT)]
         await asyncio.gather(*futs)
 
         #calcolo delle matrici
         M_r, K_r, f_r = self.create_matrices(G, G_ext, T_in, 'ritorno')
+
+        #calcolo delle temperature in tutti i nodi della rete
         T_res = self.calc_temperatures(M_r,K_r,f_r,self.temperatures['ritorno'][ts])
         self.temperatures['ritorno'].append(T_res)
+
+        #update delle temperature di ingresso nelle sottostazioni
         futs = [sub[0].set_T('T_in', T_res[i]) for sub, i in zip(self.substations, self.BCT)]
         await asyncio.gather(*futs)
 
+        #calcolo della potenza totale richiesta alle sottostazioni
         futs = [sub[0].calc_P() for sub in self.substations]
         await asyncio.gather(*futs)
-
-
-
-
 
 
     def create_Gext(self, G_ut):
         #TODO non ho fatto i nodi multipli ricorda!!!
         G_ext = np.zeros(self.graph.order())
-        for el in G_ut: G_ext[el[0]]=el[1]
+        for el in G_ut: G_ext[el[0]] = el[1]
         G_BCT = np.sum(G_ext)*-1
         #in caso ci siano più sottopstazioni (ognuna contribuisce ugualmente alla portata)
         if len(self.substations)>1:
@@ -218,7 +216,7 @@ class DistGrid(aiomas.Agent):
 
     def get_incidence_matrix(self):
         #todo use sparse maybe better...
-        self.node_list = sorted(list(self.graph.nodes), key=lambda x: int(x.split('_')[0]))
+        self.node_list = sorted(list(self.graph.nodes), key=lambda x: int(x.split('_')[-1]))
         self.edge_list = sorted(self.graph.edges(data=True), key=lambda t: t[2].get('NB', 1))
         self.NN = len(self.node_list)
         self.NB = len (self.edge_list)
@@ -281,8 +279,8 @@ class DistGrid(aiomas.Agent):
 
         for e in graph.edges():
             nb = graph.get_edge_data(*e)['NB']
-            id_out = int(e[0].split('_')[0])
-            id_in = int(e[1].split('_')[0])
+            id_out = int(e[0].split('_')[-1])
+            id_in = int(e[1].split('_')[-1])
 
             M_vec[id_out] = M_vec[id_out] + rho * cp /self.ts_size * math.pi * D[nb] **2 /4 * L[nb]/2 \
                           + rhste * cpste /self.ts_size * math.pi \
@@ -370,11 +368,7 @@ class DistGrid(aiomas.Agent):
 
 
     def calc_temperatures(self, M , K , f, T):
-
-        #T = np.linalg.lstsq((M+K), (f + np.matmul(M,T)), 1.e-10)[0] # with normal matrices
-        #expression using sparse matrices
-        #T = np.linalg.lstsq((M+K), (f + M.dot(T)), 1.e-10)[0] # with normal matrices
-
+        #using sparse matrices
         T = lng.spsolve((M+K),(f+M.dot(T)))
         return T
 

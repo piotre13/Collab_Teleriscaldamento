@@ -1,8 +1,8 @@
 ---
 paths:
-  grid_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_G1_D5"
-  input_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
-  net_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  grid_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_G1_D5"
+  input_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
+  net_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
   py_interpreter: '/home/pietrorm/Environments/District_heating/bin/python' # no need
 
 #scenario with dist grid replica comment when using data of complete network
@@ -24,10 +24,12 @@ properties:
     D_ext:
       c1: 1.10025364222324
       c2: 0.005506287389632
-  init:
+  init: # todo change in init dist and change all over the code
     T_utenza_in: 353.1500
     TBC: 391.1500
     T_in_ritorno: 318.1500
+    T_gen: 403.0000
+
 
 #simulation
 START: '2013-05-11T21:23:58.970460+07:00' #utc format or arrow getable format

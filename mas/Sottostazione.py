@@ -2,7 +2,7 @@ import aiomas
 import time
 import pickle
 
-#TODO APPEND TO HISTORY FIND THE BEST PLACE
+'''Appending to history is only done in calc or set functions'''
 
 class Sottostazione(aiomas.Agent):
     def __init__(self, container, name,sid, node_attr, properties, ts_size, transp):
@@ -18,10 +18,10 @@ class Sottostazione(aiomas.Agent):
 
         # data direzione rete di distribuzione
         self.T_dist = {'T_in': None,
-                  'T_out': None}
+                        'T_out': None}
         self.G_dist = {'G_in': None,
-                  'G_out': None}
-        self.P = [] #no losses so the power to dist and the power from transp are the same
+                        'G_out': None}
+        self.P = None #no losses so the power to dist and the power from transp are the same
 
         #data direzione rete di trasporto
         self.T_transp = {'T_in': None,
@@ -30,6 +30,7 @@ class Sottostazione(aiomas.Agent):
                        'G_out': None}
 
         #reporting
+        #todo adpat the history to the two directions dist and transp
         self.history = {'T_in': [],
                         'T_out': [],
                         'G_in': [],
@@ -58,37 +59,42 @@ class Sottostazione(aiomas.Agent):
 
 
     @aiomas.expose
-    async def get_G(self, key):
-        return self.G_dist[key]
+    async def get_G(self, key, net = 'dist'):
+        if net == 'dist':
+            return self.G_dist[key]
+        elif net == 'transp':
+            return (self.name,self.G_transp[key])
 
     @aiomas.expose
-    async def get_T(self, key, ts=None):
-        if not ts:
-            self.T_dist[key] = self.properties['init']['TBC']
-            return (self.sid ,self.T[key])
-        else:
-            return (self.sid,self.history['T'][key][ts])
-
+    async def get_T(self, key, net = 'dist'):
+        if net == 'dist':
+           return (self.sid ,self.T_dist[key])
+        elif net == 'transp':
+            return (self.name, self.T_transp[key])
 
     @aiomas.expose
-    async def get_P(self, key):
-        return self.P[key]
+    async def get_P(self):
+        return self.P
 
     @aiomas.expose
     async def set_T(self,key, T):
-        #print('setting T_in of sottostazione%s at time: %s'%(self.sid,str(self.container.clock.time()/self.ts_size)))
+        # assumiamo che in sottostazione esca ed entra sempre lA STESSA PORTATA
         self.T_dist[key] = T
-        self.history[key].append(T)
+        self.T_transp[key] = T
+        self.history[key].append(T)  # todo change the history dict
 
     @aiomas.expose
-    async def set_P(self, key, P):
-        self.P[key] = P
+    async def set_P(self, P):
+        self.P = P
+        self.history['P'].append(P)
 
     @aiomas.expose
     async def set_G(self, key, G):
+        #assumiamo che in sottostazione esca ed entra sempre lA STESSA PORTATA
         self.G_dist[key] = G
-        self.history[key].append(G)
+        self.G_transp[key] = G
+        self.history[key].append(G) #todo change the history dict
 
     @aiomas.expose
     async def get_history(self):
-        return(self.sid,self.history)
+        return(self.sid, self.history)

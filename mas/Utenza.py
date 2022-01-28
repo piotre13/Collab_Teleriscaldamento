@@ -3,6 +3,7 @@ import time
 import numpy as np
 
 #TODO APPEND TO HISTORY FIND THE BEST PLACE
+#TODO risistemare le funzioni non mi piace codipendenza tra get_t o get_P e calc()
 class Utenza(aiomas.Agent):
     def __init__(self, container, name, uid, node_attr, UserNode,  inputdata, properties, ts_size):
         super().__init__(container)
