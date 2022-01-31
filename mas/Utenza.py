@@ -43,7 +43,7 @@ class Utenza(aiomas.Agent):
         return utenza
 
 
-    def calc_G(self,key):
+    def calc_G(self, key):
         '''here we only read a csv but in future could be present a model to evaluate the requested G'''
         if key == 'G_in':
             row = self.index_input # the ith utenza
@@ -61,7 +61,8 @@ class Utenza(aiomas.Agent):
             #with no mass loss should be equal at G_in #todo
             pass
 
-    def calc_P(self):
+    @aiomas.expose
+    async def calc_P(self):
         '''here we only read a csv but in future could be present a model to evaluate the requested P'''
 
         row = self.index_input # the ith utenza
@@ -81,6 +82,7 @@ class Utenza(aiomas.Agent):
             self.T['T_out'] = T_out
             self.history['T_out'].append(T_out)
         except ZeroDivisionError:
+            print ('Utenza :%s is switched OFF')
             self.T['T_out'] = self.T['T_in']
             self.history['T_out'].append(self.T['T_in'])
 
@@ -94,7 +96,7 @@ class Utenza(aiomas.Agent):
             return (self.uid,self.history['G'][key][ts])
 
     @aiomas.expose
-    async def get_T(self, key,ts=None):
+    async def get_T(self, key, ts=None):
         if not ts:
             self.calc_T()
             return (self.uid ,self.T[key])
@@ -103,6 +105,7 @@ class Utenza(aiomas.Agent):
 
     @aiomas.expose
     async def get_P(self, ts = None):
+        #not used to be changed
         if not ts:
             self.calc_P()
             return (self.uid, self.P_req)
@@ -127,4 +130,4 @@ class Utenza(aiomas.Agent):
 
     @aiomas.expose
     async def get_history(self):
-        return(self.uid,self.history)
+        return(self.name,self.history)

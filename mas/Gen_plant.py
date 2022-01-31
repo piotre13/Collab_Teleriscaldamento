@@ -47,7 +47,7 @@ class GenerationPlant(aiomas.Agent):
     @aiomas.expose
     async def calc_P(self):
         #TODO check signs and equation
-        self.P = self.G_dist['G_out']*self.properties['cpw'] * (self.T_dist['T_out']-self.T_dist['T_in'])
+        self.P = self.G['G_out']*self.properties['cpw'] * (self.T['T_out']-self.T['T_in'])
         self.history['P'].append(self.P)
 
 
@@ -81,5 +81,5 @@ class GenerationPlant(aiomas.Agent):
         return self.P
 
     @aiomas.expose
-    async def get_history(self):
-        return(self.sid, self.history)
+    async def reporting(self):
+        return(self.name, self.history)

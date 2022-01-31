@@ -40,6 +40,12 @@ class DistGrid(aiomas.Agent):
         self.temperatures = {'mandata': [],
                              'ritorno': []}
 
+        self.history = {
+            'T_mandata': [],
+            'T_ritorno': [],
+            'G': [],
+        }
+
 
     @classmethod
     async def create(cls, container, net_name, net_path, num, UserNode, BCT, inputdata, properties, ts_size, transp_addr):
@@ -143,13 +149,15 @@ class DistGrid(aiomas.Agent):
         #conservazione dell'energia: calcolo delle temperature in tutti i nodi
         T_res = self.calc_temperatures(M,K,f, self.temperatures['mandata'][ts])
         self.temperatures['mandata'].append(T_res)
+        self.history['T_mandata'].append(T_res)
 
         #update utenze e substation con le temperature calcolate
         futs = [ut[0].set_T('T_in',T_res[i]) for ut,i in zip(self.utenze,self.UserNode)]
         await asyncio.gather(*futs)
 
-        futs = [sub[0].set_T('T_out', T_res[i]) for sub, i in zip(self.substations, self.BCT)]
-        await asyncio.gather(*futs)
+        #no set temperature per substatation here is done in tranport
+        #futs = [sub[0].set_T('T_out', T_res[i]) for sub, i in zip(self.substations, self.BCT)]
+        #await asyncio.gather(*futs)
 
         #RITORNO**********************************************************************************************************
         #initialization ritorno ********************+
@@ -159,13 +167,14 @@ class DistGrid(aiomas.Agent):
         #**********************************************
 
         #richiesta potenze da utenza (per ora solo lette da file)
-        futs = [ut[0].get_P() for ut in self.utenze]
-        P = await asyncio.gather(*futs) #serve per update le potenze nelle utenze #todo brutto non mi piace cambiare con calc() senza return
+        futs = [ut[0].calc_P() for ut in self.utenze]
+        await asyncio.gather(*futs) #serve per update le potenze nelle utenze #todo brutto non mi piace cambiare con calc() senza return
 
         #calcolo delle temperaturew in uscita dalle utenze (usando la potenza)
         futs = [ut[0].get_T('T_out') for ut in self.utenze]
         T2 = await asyncio.gather(*futs)
         T_in = T2
+
 
         #calcolo portate
         G = - G
@@ -183,6 +192,7 @@ class DistGrid(aiomas.Agent):
         #calcolo delle temperature in tutti i nodi della rete
         T_res = self.calc_temperatures(M_r,K_r,f_r,self.temperatures['ritorno'][ts])
         self.temperatures['ritorno'].append(T_res)
+        self.history['T_ritorno'].append(T_res)
 
         #update delle temperature di ingresso nelle sottostazioni
         futs = [sub[0].set_T('T_in', T_res[i]) for sub, i in zip(self.substations, self.BCT)]
@@ -258,13 +268,13 @@ class DistGrid(aiomas.Agent):
             rhste = 0.0
 
         if dir == 'mandata':
-            nodi_immissione = self.BCT
-            nodi_estrazione = self.UserNode
+            nodi_immissione = self.BCT.tolist()
+            nodi_estrazione = self.UserNode.tolist()
             T_immissione = T
             graph = self.graph.copy()
         elif dir == 'ritorno':
-            nodi_immissione = self.UserNode
-            nodi_estrazione = self.BCT
+            nodi_immissione = self.UserNode.tolist()
+            nodi_estrazione = self.BCT.tolist()
             T_immissione= T
             graph = self.graph.reverse()
         else:
@@ -292,7 +302,7 @@ class DistGrid(aiomas.Agent):
         for i in range(NN): #loop nodi
             #nodi centrali
             if i not in nodi_immissione and i not in nodi_estrazione:
-                node_name = str(i)+'_'+self.name
+                node_name = self.name+'_'+'inner_'+str(i)
                 in_edges = list(graph.in_edges(node_name))
                 for ed in in_edges:
                     l = L[graph.get_edge_data(*ed)['NB']]
@@ -302,7 +312,7 @@ class DistGrid(aiomas.Agent):
 
                     f[i] = f[i] + ((l * math.pi * d * U * self.prop['T_inf']) / 2) #vettore f per branches uscenti
 
-                    ed_id = int(ed[0].split('_')[0])
+                    ed_id = int(ed[0].split('_')[-1])
                     K[i,ed_id] = - cp * G[graph.get_edge_data(*ed)['NB']] # posizioni (nodo entrante, nodo uscente)d
 
                 out_edges = list(graph.out_edges(node_name))
@@ -318,11 +328,15 @@ class DistGrid(aiomas.Agent):
             else:
 
                 if i in nodi_estrazione:
-                    node_name = str(i) + '_' + self.name
+                    if dir == 'mandata':
+                        node_name = self.name+'_'+'Utenza_'+str(i)
+                    elif dir == 'ritorno':
+                        node_name = self.name+'_'+'BCT_'+str(i)
+
                     in_edges = list(graph.in_edges(node_name))
                     for ed in in_edges:
                         nb =graph.get_edge_data(*ed)['NB']
-                        ed_id = int(ed[0].split('_')[0])
+                        ed_id = int(ed[0].split('_')[-1])
                         K[i,ed_id] = - cp * G[nb] + L[nb]* math.pi * D[nb] * U /4
 
                         K[i,i] = cp * G[nb] + L[nb] * math.pi * D[nb]* U /4
@@ -336,7 +350,7 @@ class DistGrid(aiomas.Agent):
                     for ed in out_edges:
                         nb = graph.get_edge_data(*ed)['NB']
                         if abs(G[nb]) < np.finfo(float).eps:
-                            ed_id = int(ed[1].split('_')[0])
+                            ed_id = int(ed[1].split('_')[-1])
                             K[i,ed_id] = - cp * G[nb] + L[nb] * math.pi * D[nb] * U /4
                             K [i,i] =  cp * G[nb] + L[nb] * math.pi * D[nb]* U /4
                             f[i] = L[nb] * math.pi * D[nb] * U * self.prop['T_inf'] / 2
@@ -345,14 +359,17 @@ class DistGrid(aiomas.Agent):
                                            nb] / 2
 
                 elif i in nodi_immissione:
-                    node_name = str(i) + '_' + self.name
+                    if dir == 'mandata':
+                        node_name = self.name+'_'+'BCT_'+str(i)
+                    elif dir == 'ritorno':
+                        node_name = self.name+'_'+'Utenza_'+str(i)
+                    #node_name = str(i) + '_' + self.name
                     out_edges = list (graph.out_edges(node_name))
                     for ed in out_edges:
-                        nb= graph.get_edge_data(*ed)['NB']
+                        nb = graph.get_edge_data(*ed)['NB']
                         if abs(G_ext[i]) > np.finfo(float).eps:
                             K[i,:] = 0
                             K[i,i] = 1
-                            #todo should change this for the temperature could be aranged in a vector at the beginning ???
                             for j in T_immissione:
                                 if j[0] == i:
                                     T=j[1]
@@ -374,14 +391,22 @@ class DistGrid(aiomas.Agent):
 
     @aiomas.expose
     async def reporting(self):
+        data = {}
+
         futs = [sub[0].get_history() for sub in self.substations]
         reports_subs = await asyncio.gather(*futs)
+        for res in reports_subs:
+            data[res[0]] = res[1]
+
         futs = [ut[0].get_history() for ut in self.utenze]
         reports_ut = await asyncio.gather(*futs)
-        data={}
-        data['sottostazioni'] = reports_subs
-        data['utenze'] = reports_ut
-        return data
+        for res in reports_ut:
+            data[res[0]] = res[1]
+
+        data[self.name] = self.history
+
+        return (self.name, data)
+
 
 
     def check (self,M, K, f):

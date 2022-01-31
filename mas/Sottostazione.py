@@ -31,10 +31,14 @@ class Sottostazione(aiomas.Agent):
 
         #reporting
         #todo adpat the history to the two directions dist and transp
-        self.history = {'T_in': [],
-                        'T_out': [],
-                        'G_in': [],
-                        'G_out': [],
+        self.history = {'T_in_dist': [],
+                        'T_out_dist': [],
+                        'G_in_dist': [],
+                        'G_out_dist': [],
+                        'T_in_transp': [],
+                        'T_out_transp': [],
+                        'G_in_transp': [],
+                        'G_out_transp': [],
                         'P':[]
                         }
 
@@ -77,11 +81,30 @@ class Sottostazione(aiomas.Agent):
         return self.P
 
     @aiomas.expose
-    async def set_T(self,key, T):
-        # assumiamo che in sottostazione esca ed entra sempre lA STESSA PORTATA
-        self.T_dist[key] = T
-        self.T_transp[key] = T
-        self.history[key].append(T)  # todo change the history dict
+    async def set_T(self,key, T, side = 'dist'):
+        # assumiamo che in sottostazione esca ed entri sempre lA STESSA PORTATA
+        if side == 'dist':
+            self.T_dist[key] = T
+            hist_key = key + '_' + side
+            self.history[hist_key].append(T)
+
+            # same values for the transport side # TODO check if reversing signs
+            rev_key = self.reverse_dir(key)
+            hist_key = rev_key + '_transp'
+            self.T_transp[rev_key] = T
+            self.history[hist_key].append(T)
+
+        # is actually never used
+        elif side == 'transp':
+            self.T_transp[key] = T
+            hist_key = key + '_' + side
+            self.history[hist_key].append(T)
+
+            # same values for the transport side # TODO check if reversing signs
+            rev_key = self.reverse_dir(key)
+            hist_key = rev_key + '_dist'
+            self.T_dist[rev_key] = T
+            self.history[hist_key].append(T)
 
     @aiomas.expose
     async def set_P(self, P):
@@ -89,12 +112,34 @@ class Sottostazione(aiomas.Agent):
         self.history['P'].append(P)
 
     @aiomas.expose
-    async def set_G(self, key, G):
+    async def set_G(self, key, G, side = 'dist'):
         #assumiamo che in sottostazione esca ed entra sempre lA STESSA PORTATA
-        self.G_dist[key] = G
-        self.G_transp[key] = G
-        self.history[key].append(G) #todo change the history dict
+        if side == 'dist':
+            self.G_dist[key] = G
+            hist_key = key + '_' + side
+            self.history[hist_key].append(G)
+
+            #same values for the transport side # TODO check if reversing signs
+            rev_key = self.reverse_dir(key)
+            hist_key = rev_key + '_transp'
+            self.G_transp[rev_key] = G
+            self.history[hist_key].append(G)
+
+        #is actually never used
+        elif side == 'transp':
+            self.G_transp[key] = G
+            hist_key = key + '_' + side
+            self.history[hist_key].append(G)
+
 
     @aiomas.expose
     async def get_history(self):
-        return(self.sid, self.history)
+        return(self.name, self.history)
+
+
+    def reverse_dir (self,key):
+        if key.endswith('in'):
+            new_key = key[:2] + 'out'
+        elif key.endswith('out'):
+            new_key = key[:2] + 'in'
+        return new_key

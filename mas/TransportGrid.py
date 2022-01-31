@@ -37,6 +37,11 @@ class TranspGrid(aiomas.Agent):
         #data
         self.temperatures = {'mandata': [],
                              'ritorno': []}
+        self.history = {
+            'T_mandata' : [],
+            'T_ritorno': [],
+            'G':[],
+            }
 
 
 
@@ -106,6 +111,7 @@ class TranspGrid(aiomas.Agent):
             for gen in TGEN:
                 T_in[gen[0]] =gen[1]
             self.temperatures['mandata'].append(T_in)
+            self.history['T_mandata'].append(T_in)
 
 
         #calcolo portate per istante t EQUAZIONE DI CONTINUITA'
@@ -121,8 +127,9 @@ class TranspGrid(aiomas.Agent):
         #richiesta temperatura mandata centrale
         futs = [gen[0].get_T('T_out') for gen_n, gen in self.generation_plants.items()]
         TGEN = await asyncio.gather(*futs)
-        futs = [sub[0].get_T('T_in', 'transp') for sub_n, sub in self.BCT.items()]
-        TBCT = await asyncio.gather(*futs)
+
+        #futs = [sub[0].get_T('T_in', 'transp') for sub_n, sub in self.BCT.items()]
+        #TBCT = await asyncio.gather(*futs) cancel
 
         #calcolo delle matrici
         M, K, f = self.create_matrices(G,G_ext,TGEN,'mandata')
@@ -130,40 +137,49 @@ class TranspGrid(aiomas.Agent):
         #conservazione dell'energia: calcolo delle temperature in tutti i nodi
         T_res = self.calc_temperatures(M,K,f, self.temperatures['mandata'][ts])
         self.temperatures['mandata'].append(T_res)
+        self.history['T_mandata'].append(T_res)
 
-        #update substation e centrale con le temperature calcolate
-        futs = [sub[0].set_T('T_in',T_res[self.get_BCT_index(sub_n)]) for sub_n, sub in self.BCT.items()]
+        #update substation con le temperature calcolate
+        futs = [sub[0].set_T('T_in',T_res[self.get_BCT_index(sub_n)], 'transp') for sub_n, sub in self.BCT.items()]
         await asyncio.gather(*futs)
-        # #todo l'update delle T_out di substation non dovrebbe servire fai check
-        futs = [gen[0].set_T('T_out', T_res[int(gen_n.split('_')[-1])]) for gen_n, gen in self.generation_plants.items()]
-        await asyncio.gather(*futs)
+
         print('fuckyeah!!!')
 
-        # #RITORNO**********************************************************************************************************
-        # #calcolo delle temperature di uscita dalle utenze
-        # futs = [ut[0].get_P() for ut in self.utenze]
-        # P = await asyncio.gather(*futs) #serve per update le potenze nelle utenze
-        # futs = [ut[0].get_T('T_out') for ut in self.utenze]
-        # T2 = await asyncio.gather(*futs)
-        # T_in = T2
-        #
-        # #calcolo portate
-        # G = - G
-        # G[G < 0] = G[G < 0] * -1
-        # G_ext = - G_ext
-        # G_ext[G_ext < 0] = G_ext[G_ext < 0] * -1
-        # futs = [sub[0].set_G('G_in', G_ext[i]) for sub, i in zip(self.substations, self.BCT)]
-        # await asyncio.gather(*futs)
-        #
-        # #calcolo delle matrici
-        # M_r, K_r, f_r = self.create_matrices(G, G_ext, T_in, 'ritorno')
-        # T_res = self.calc_temperatures(M_r,K_r,f_r,self.temperatures['ritorno'][ts])
-        # self.temperatures['ritorno'].append(T_res)
-        # futs = [sub[0].set_T('T_in', T_res[i]) for sub, i in zip(self.substations, self.BCT)]
-        # await asyncio.gather(*futs)
-        #
-        # futs = [sub[0].calc_P() for sub in self.substations]
-        # await asyncio.gather(*futs)
+        #RITORNO**********************************************************************************************************
+        #only first time_step
+        if ts == 0: # TODO
+            T_in_ret = np.ones(self.graph.order()) * self.prop['init']['TBC']
+            self.temperatures['ritorno'].append(T_in_ret)
+            self.history['T_ritorno'].append(T_in_ret)
+
+        #gathering delle temperature in uscita dalle sottostazioni = a quelle di entrata nella rete di distribuzione
+        futs = [sub[0].get_T('T_out','transp') for sub_n, sub in self.BCT.items()]
+        T2 = await asyncio.gather(*futs)
+        T_in = self.index_gather_res(T2) # should this be a vector with all the temperature?
+
+        #calcolo portate + set della portata per il ritorno nelle centrali
+        G = - G
+        G[G < 0] = G[G < 0] * -1
+        G_ext = - G_ext
+        G_ext[G_ext < 0] = G_ext[G_ext < 0] * -1
+        futs = [gen[0].set_G('G_in', G_ext[int(gen_n.split('_')[-1])]) for gen_n, gen in self.generation_plants.items()]
+        await asyncio.gather(*futs)
+
+        #calcolo delle matrici
+        M_r, K_r, f_r = self.create_matrices(G, G_ext, T_in, 'ritorno')
+
+        #calcolo delle temperature nella rete + save results + update T ret in power plants
+        T_res = self.calc_temperatures(M_r,K_r,f_r,self.temperatures['ritorno'][ts])
+        self.temperatures['ritorno'].append(T_res)
+        self.history['T_ritorno'].append(T_res)
+        futs = [gen[0].set_T('T_in', T_res[int(gen_n.split('_')[-1])]) for gen_n, gen in self.generation_plants.items()]
+        await asyncio.gather(*futs)
+
+        #calculating power at each power plant
+        futs = [gen[0].calc_P() for gen_n, gen in self.generation_plants.items()]
+        await asyncio.gather(*futs)
+
+        print('calculation step for transport ends!')
 
 
 
@@ -354,7 +370,13 @@ class TranspGrid(aiomas.Agent):
 
         return M, K , f
 
-
+    def index_gather_res (self, gather_res):
+        ''' we use this function to reindex in the current grid the returned values from
+        gather substations'''
+        res = []
+        for j in gather_res:
+            res.append((self.get_BCT_index(j[0]),j[1]))
+        return res
 
     def calc_temperatures(self, M , K , f, T):
 
@@ -367,14 +389,20 @@ class TranspGrid(aiomas.Agent):
 
     @aiomas.expose
     async def reporting(self):
-        futs = [sub[0].get_history() for sub in self.substations]
-        reports_subs = await asyncio.gather(*futs)
-        futs = [ut[0].get_history() for ut in self.utenze]
-        reports_ut = await asyncio.gather(*futs)
-        data={}
-        data['sottostazioni'] = reports_subs
-        data['utenze'] = reports_ut
-        return data
+        data = {}
+
+        futs = [dist[0].reporting() for n, dist in self.dist_grids.items()]
+        reports_subs = await asyncio.gather(*futs) # should return a tuple (name,*res)
+        for res in reports_subs:
+            data[res[0]] = res[1]
+
+        futs = [gen[0].reporting() for gen_n, gen in self.generation_plants.items()]
+        report_gens = await asyncio.gather(*futs)
+        for res in report_gens:
+            data[res[0]] = res[1]
+
+        data[self.name] = self.history
+        return (self.name,data)
 
 
     def check (self,M, K, f):

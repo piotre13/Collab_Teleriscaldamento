@@ -44,6 +44,9 @@ class Simulator(object):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.create())
 
+        #reports
+        self.report = {}
+
 
     async def clock_setter(self):
         '''
@@ -182,16 +185,23 @@ class Simulator(object):
 
         # *********** FINALIZE condition #when outside the loop
         #TODO make a good report and final check if its working
-        futs = [grid[0].reporting() for grid in self.distgrids]
+        #todo call reporting() meth from transp grid whcih recalls all methods reporting() from dist grids and so on
+        #encapsulated hierarchical reports
+        futs = [grid[0].reporting() for grid in self.transp_grids]
         reports_grids = await asyncio.gather(*futs)
-        self.report((reports_grids))
+        for res in reports_grids:
+            self.report[res[0]] = res[1]
+
+        print(self.report)
+
+        #self.report((reports_grids))
         #this data is a list for each dist grid with dict cpontaining info of substations and utenze
         await self.finalize()
         return (print('simul SUCCESSFULLY ended!'))
         # **********************************
 
 
-    def report(self, reports):
+    def save_reports(self, reports):
         '''reports is a list for each grid created that contains all reporting data...
         this function saves the pickle to be used for analysis'''
         with open('Final_reports.pickle', 'wb') as handle:

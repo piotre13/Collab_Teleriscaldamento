@@ -1,8 +1,8 @@
 ---
 paths:
-  grid_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_G1_D5"
-  input_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
-  net_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  grid_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_G1_D5"
+  input_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
+  net_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
   py_interpreter: '/home/pietrorm/Environments/District_heating/bin/python' # no need
 
 #scenario with dist grid replica comment when using data of complete network
@@ -31,11 +31,12 @@ properties:
     T_gen: 403.0000
 
 
+
 #simulation
 START: '2013-05-11T21:23:58.970460+07:00' #utc format or arrow getable format
 END: '2013-05-11T21:23:58.970460+07:00' #utc format or arrow getable format
 TS_SIZE: 60    #in seconds 300
-DURATION: 2156  # 432 in number of timesteps
+DURATION: 20 #2156  # 432 in number of timesteps
 
 #aiomas
 HOST: "localhost"
