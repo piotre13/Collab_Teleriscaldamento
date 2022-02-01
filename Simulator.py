@@ -192,7 +192,7 @@ class Simulator(object):
         for res in reports_grids:
             self.report[res[0]] = res[1]
 
-        print(self.report)
+        self.save_reports(self.report)
 
         #self.report((reports_grids))
         #this data is a list for each dist grid with dict cpontaining info of substations and utenze
@@ -204,7 +204,7 @@ class Simulator(object):
     def save_reports(self, reports):
         '''reports is a list for each grid created that contains all reporting data...
         this function saves the pickle to be used for analysis'''
-        with open('Final_reports.pickle', 'wb') as handle:
+        with open('Plot&analysis/Final_reports.pickle', 'wb') as handle:
             pickle.dump(reports, handle, protocol=pickle.HIGHEST_PROTOCOL)
         handle.close()
 
