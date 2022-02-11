@@ -3,10 +3,11 @@
  It outputs a dict of Directed subgraphs one for the transport and one for each dist subgrid
  the structure of graphs id the same:
     each node attr:
-        - type : ['inner', 'free' ,'BCT', 'Utenza']
+        - type : ['inner', 'free' ,'BCT', 'Utenza', 'Storage']
         - connection : name of node from other subgraph
+        - storages
     each edge attr:
-        - lenght (lenght of the pipe)
+        - length (length of the pipe)
         - D (diameter)
         - NB (number of branch for datainput)
 '''
@@ -95,6 +96,7 @@ def synthetic_whole_grid (base_graph, n_dist, n_gen=1):
     DiG = base_graph.copy()
     #updating nodes attributes
     for node in DiG.nodes:
+        DiG.nodes[node]['storages'] = []
         if DiG.nodes[node]['type'] == 'Utenza':
             DiG.nodes[node]['type'] = 'free'
         elif DiG.nodes[node]['type'] == 'BCT':
@@ -161,7 +163,7 @@ def save_object(graph,scenario_name):
 
 
 if __name__ == '__main__':
-    net_data_path = '/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/NetData419.mat'
+    net_data_path = '/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat'
     NUM_dist = 5
     NUM_gen = 1
     scenario_name = 'CompleteNetwork_G%s_D%s'%(NUM_gen,NUM_dist)
@@ -170,19 +172,19 @@ if __name__ == '__main__':
 
     save_object(final_graph, scenario_name)
 
-    with open ('CompleteNetwork_G1_D5', 'rb') as f:
-        dist_graph = pickle.load(f)
-        dist_graph = dist_graph['dist_0']
-        f.close()
-    node_list = sorted(list(dist_graph.nodes), key=lambda x: int(x.split('_')[0]))
-    edge_list = sorted(dist_graph.edges(data=True), key=lambda t: t[2].get('NB', 1))
-    graph_matrix = nx.incidence_matrix(dist_graph,nodelist=node_list,edgelist=edge_list, oriented=True).todense().astype(int)
-    graph_matrix = np.array(graph_matrix)
-    A = read_data(net_data_path)['A']
-
-
-    #dist_1_graph =
-    net = Network()
-    net.from_nx(final_graph)
-    net.show_buttons()
-    net.show('transport_grid.html')
+    # with open ('CompleteNetwork_G1_D5', 'rb') as f:
+    #     dist_graph = pickle.load(f)
+    #     dist_graph = dist_graph['dist_0']
+    #     f.close()
+    # node_list = sorted(list(dist_graph.nodes), key=lambda x: int(x.split('_')[0]))
+    # edge_list = sorted(dist_graph.edges(data=True), key=lambda t: t[2].get('NB', 1))
+    # graph_matrix = nx.incidence_matrix(dist_graph,nodelist=node_list,edgelist=edge_list, oriented=True).todense().astype(int)
+    # graph_matrix = np.array(graph_matrix)
+    # A = read_data(net_data_path)['A']
+    #
+    #
+    # #dist_1_graph =
+    # net = Network()
+    # net.from_nx(final_graph)
+    # net.show_buttons()
+    # net.show('transport_grid.html')

@@ -5,12 +5,30 @@ paths:
   net_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
   py_interpreter: '/home/pietrorm/Environments/District_heating/bin/python' # no need
 
+# Scenario creation: **************************************
+ScenarioCreation:
+  from_data: False # if True should have a datafile for the whole grid
+  real_net: "" # path of the real grid datafile
+  sample_net: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  numDistGrids: 5 # when creating from sample number of distribution grid randomly connected
+  numGenerators: 1 # when creating from sample number of generators in place of sample_BCT
+  Transp_properties: # used to augment physical params of Transp grid from sample_grid
+    len_mul : 1.2
+    D_mul : 1.3
+  numStorages:
+    indSto: 0 # num of storages in inner nodes or free nodes
+    genSto: 3 #number of storages at Generators premises
+    utSto: 0 #number of storages at Utenze premises
+
+#***********************************************************
+
 #scenario with dist grid replica comment when using data of complete network
 #num_Grids: 1
 
 #scenario with actual data decomment if using
 num_Grids: None
 
+# Simulation process ***************************************
 #properties
 properties:
   cpw: 4186
