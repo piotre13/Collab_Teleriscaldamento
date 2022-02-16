@@ -10,16 +10,44 @@ ScenarioCreation:
   from_data: False # if True should have a datafile for the whole grid
   real_net: "" # path of the real grid datafile
   sample_net: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
-  numDistGrids: 5 # when creating from sample number of distribution grid randomly connected
-  numGenerators: 1 # when creating from sample number of generators in place of sample_BCT
+  #numDistGrids: 5 # when creating from sample number of distribution grid randomly connected
+  #numGenerators: 1 # when creating from sample number of generators in place of sample_BCT
+
   Transp_properties: # used to augment physical params of Transp grid from sample_grid
     len_mul : 1.2
     D_mul : 1.3
-  numStorages:
-    indSto: 0 # num of storages in inner nodes or free nodes
-    genSto: 3 #number of storages at Generators premises
-    utSto: 0 #number of storages at Utenze premises
 
+  Distributions: # key:value pairs for distribution grids with the list of nodes id of the connection to transport
+    Grids:
+      0: [193]
+      1: [119]
+      2: [81]
+      3: [93]
+      4: [114]
+
+
+
+  Generators:  # key:value pairs for generators with the node id of the position
+    0: 4
+
+  Storages:     # key:value pairs for storages with the node id of the position (could be any node of the whole system)
+    0: 4
+    1: 4
+    2: 4
+    3: 'dist_0_45'
+    4: 'dist_0_183'
+
+
+  sto_schedule:
+    1:
+      charge: !!python/tuple ['0am','4am']
+      discharge: !!python/tuple ['5am','7am']
+    2:
+      charge: !!python/tuple [ '0am','4am' ]
+      discharge: !!python/tuple [ '5am','7am' ]
+    3:
+      charge: !!python/tuple [ '0am','4am' ]
+      discharge: !!python/tuple [ '5am','7am' ]
 #***********************************************************
 
 #scenario with dist grid replica comment when using data of complete network

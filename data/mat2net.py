@@ -106,8 +106,8 @@ def synthetic_whole_grid (base_graph, n_dist, n_gen=1):
     for node1,node2,data in DiG.edges.data():
         #create the mapping
         edge = (node1,node2)
-        data['lenght'] = data['lenght'] * 1.2  # todo parametrized
-        data['D'] = data['D'] * 1.3  # todo parametrized
+        data['lenght'] = data['lenght'] * 1.2
+        data['D'] = data['D'] * 1.3
         mapping[edge] = data
 
 
@@ -131,7 +131,6 @@ def synthetic_whole_grid (base_graph, n_dist, n_gen=1):
 
     #here we should connect the graphs and collapse the nodes in common
     #maybe just keep them separately and add an attribute as a connection
-    #TODO : add the connections as attributes to the nodes and change in transp the connected nodes from free to the name of dist and node
     BCT_nodes = [x for x,y in DiG.nodes(data=True) if y['type']=='BCT']
     free_nodes = [x for x,y in DiG.nodes(data=True) if y['type']=='free']
 

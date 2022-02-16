@@ -9,7 +9,12 @@ import networkx as nx
 from pyvis.network import Network
 import pickle
 from Utils import read_config
+import time
 
+
+'''grid sintax:
+    node_attributes:
+        - type: Gen/BCT/free/inner/Storage/Utenza '''
 
 class GridScenario(object):
     def __init__(self, name):
@@ -18,9 +23,9 @@ class GridScenario(object):
         self.graph = None
 
         #virtual grid params
-        self.N_dist = self.config['numDistGrids']
-        self.N_gens = self.config['numGenerators']
-        self.N_sto = self.config['numStorages']
+        self.Dist_conf = self.config['Distributions']
+        self.Sto_conf = self.config['Storages']
+        self.Gen_conf = self.config['Generators']
 
     def run(self):
         ''' main function of the class '''
@@ -41,35 +46,31 @@ class GridScenario(object):
         
         # creating the main transport graph from the base one
         self.graph = sample_graph.copy()
-        # updating nodes attributes
+
+        # updating nodes attributes for the transport grid
+        #HERE WHERE TO ADD ATTRIBUTE KEYS
         for node in self.graph.nodes:
-            #here to insert new node attributes
-            self.graph.nodes[node]['storages'] = []
+            self.graph.nodes[node]['group'] = 'transp'
+            self.graph.nodes[node]['storages']=[]
             if self.graph.nodes[node]['type'] == 'Utenza':
                 self.graph.nodes[node]['type'] = 'free'
-            elif self.graph.nodes[node]['type'] == 'BCT':
-                self.graph.nodes[node]['type'] = 'Gen'
+
         # updating edge attributes
         mapping = {}
         for node1, node2, data in self.graph.edges.data():
             # create the mapping
             edge = (node1, node2)
-            data['lenght'] = data['lenght'] * self.config['Transp_properties']['len_mul']  # todo parametrized
-            data['D'] = data['D'] * self.config['Transp_properties']['D_mul']  # todo parametrized
+            data['lenght'] = data['lenght'] * self.config['Transp_properties']['len_mul']
+            data['D'] = data['D'] * self.config['Transp_properties']['D_mul']
             mapping[edge] = data
 
-        # adding the distribution distgrids to the whole graph
-        for n in range(self.N_dist):
-            prefix = 'dist_%s_' % n
-            mapping = {}
-            for node, type in sample_graph.nodes(data='type'):
-                mapping[node] = prefix + str(type) + '_' + str(node)  # creating the mapping for relabelling
-
-            dist_graph = nx.relabel_nodes(sample_graph, mapping)
-            # COMPOSING THE WHOLE NEW GRAPH WITH TRANSPORT AND DISTRIBUTION
-            self.graph = nx.compose(self.graph, dist_graph)
-
+        #ADDING DISTRIBUTION GRIDS
+        self.add_distribution(sample_graph)
+        self.show_graph()
         # ADDING COMPONENTS
+        #connecting grids
+        self.connecting_grids()
+
         # adding more generators (Centrali)
         self.add_Generators()
 
@@ -113,55 +114,71 @@ class GridScenario(object):
             elif node in mat_data['BCT']:
                 DiG.nodes[node]['type'] = 'BCT'
             else:
-                DiG.nodes[node]['type'] = 'inner'
+                if DiG.degree(node) == 1:
+                    DiG.nodes[node]['type'] = 'free'
+                else:
+                    DiG.nodes[node]['type'] = 'inner'
 
         return DiG
 
+    def add_distribution(self, sample_graph):
+        # adding the distribution distgrids to the whole graph
+        for n in self.Dist_conf['Grids']:
+            prefix = 'dist_%s' % n
+            mapping = {}
+            for node, type in sample_graph.nodes(data='type'):
+                mapping[node] = prefix+ '_' + str(node)  # creating the mapping for relabelling
+
+            dist_graph = nx.relabel_nodes(sample_graph, mapping)
+            for node in dist_graph:
+                dist_graph.nodes[node]['group'] = prefix
+                dist_graph.nodes[node]['storages'] = []
+
+            #dist_graph.graph['type'] = 'distribution'
+            # COMPOSING THE WHOLE NEW GRAPH WITH TRANSPORT AND DISTRIBUTION
+            self.graph = nx.compose(self.graph, dist_graph)
+
+
+    def connecting_grids(self):
+
+        for n, connection in self.Dist_conf['Grids'].items():
+            BCT_nodes = self.get_BCT_nodes('dist_%s' % n)
+            free_nodes = self.get_free_nodes('transp')
+
+            assert len(free_nodes) > len(BCT_nodes), "Not enough free nodes in Transport grid for connecting all BCT"
+            for BCT, con in zip(BCT_nodes, connection):
+                if con in free_nodes:
+                    self.graph.nodes[BCT]['connection'] = connection
+                    self.graph.nodes[con]['connection'] = BCT
+                    self.graph.nodes[con]['type'] = 'BCT'
+                else:
+                    raise ValueError (' The specified connections for Dist grid %s are wrong'%n)
+                    #TODO  possible random assignment when config connections are wrong
+
+
     def add_Generators (self):
-        if self.N_gens != 1:
-            for n in range(self.N_gens):
-                free_nodes = [x for x, y in self.graph.nodes(data=True) if y['type'] == 'free']
-                self.graph.nodes[free_nodes[0]]['type'] = 'Gen'
-
-        BCT_nodes = [x for x, y in self.graph.nodes(data=True) if y['type'] == 'BCT']
-        free_nodes = [x for x, y in self.graph.nodes(data=True) if y['type'] == 'free']
-
-        assert len(free_nodes) > len(BCT_nodes), "Not enough free nodes in Transport grid for connecting all BCT"
-        for BCT, free in zip(BCT_nodes, free_nodes):
-            self.graph.nodes[BCT]['connection'] = free
-            self.graph.nodes[free]['connection'] = BCT
-            self.graph.nodes[free]['type'] = 'BCT'
+        for g_n, node in self.Gen_conf.items():
+            if self.graph.nodes[node]['type'] == 'BCT' and self.graph.nodes[node]['group'] == 'transp' :
+                self.graph.nodes[node]['type'] = 'Gen'
+            else:
+                raise ValueError(' The specified connections for generator %s are wrong' % g_n)
+                # TODO  possible random assignment when config connections are wrong
 
 
     def add_Storages (self):
-        indSto = self.N_sto['indSto']
-        GenSto = self.N_sto['genSto']
-        UtSto = self.N_sto['utSto']
-
-        for sto in range(indSto):
-            #TODO complete for indipendent storages
-            pass
-
-        #spreding storages to all gens
-        #todo forse tutto questo accrocchio non è generalizzabile
-        Gen_nodes = [x for x, y in self.graph.nodes(data=True) if y['type'] == 'Gen']
-
-        j = GenSto - (GenSto%len(Gen_nodes))
-        for gen in Gen_nodes:
-            for i in range(j):
-                name = 'Storage_%s'%i
-                self.graph.nodes[gen]['storages'].append(name)
-        # se ne avanzano li attacco tutti al primo
-        j = GenSto - len(Gen_nodes)
-        if j > 0 and GenSto < len(Gen_nodes):
-            for s in range(j):
-                name = self.graph.nodes[Gen_nodes[0]]['storages'][-1]+str(int(s)+1)
-                self.graph.nodes[Gen_nodes[0]]['storages'].append(name)
+        #adding storages
+        #NB i nodi possono occupare un nodo libero o un nodo con qualcosa se sono liberi verranno creati come agenti indipendenti
+        #gestiti dalla griglia di appartenenza senno verranno creati dall' agente competente (e.g. centrale, utenza o bct)
+        for s_n, node in self.Sto_conf.items():
+            if self.graph.nodes[node]['type'] == 'free' or self.graph.nodes[node]['type'] == 'inner' :
+                self.graph.nodes[node]['type'] = 'Storage'
+            else:
+                name = str(node) +'_'+self.graph.nodes[node]['type']+ '_' +str(len(self.graph.nodes[node]['storages'])+1)
+                self.graph.nodes[node]['storages'].append(name)
 
 
-        for sto in range(UtSto):
-            #TODO complete for storages in utility premises
-            pass
+
+
 
     def read_sample_data(self, data_path):
         d = loadmat(self.config['sample_net'])
@@ -176,7 +193,7 @@ class GridScenario(object):
     def read_real_data(self):
         pass
 
-    def show_graph(self, path, graph=None):
+    def show_graph(self, path=None, graph=None):
         if not graph:
             graph = self.graph
         net = Network()
@@ -184,8 +201,31 @@ class GridScenario(object):
         net.show_buttons()
         net.show('debug.html')
 
+    def get_free_nodes (self, group = None):
+        if not group:
+            return [x for x, y in self.graph.nodes(data=True) if y['type'] == 'free']
+        else:
+            return [x for x, y in self.graph.nodes(data=True) if y['type'] == 'free' and y['group'] == group]
+
+    def get_BCT_nodes (self, group = None):
+        if not group:
+            return [x for x, y in self.graph.nodes(data=True) if y['type'] == 'BCT']
+        else:
+            return [x for x, y in self.graph.nodes(data=True) if y['type'] == 'BCT' and y['group'] == group]
+
+    def get_plant_nodes(self, group = None):
+        if not group:
+            return [x for x, y in self.graph.nodes(data=True) if y['type'] == 'Gen']
+        else:
+            return [x for x, y in self.graph.nodes(data=True) if y['type'] == 'Gen' and y['group'] == group]
+
     def get_connected_scenario(self):
         pass
+    def check_consistency(self):
+        #todo add all the posisble checks
+        #e.g connection etc
+        pass
+
     def save_object(self):
         scenario = {}
         scenario['complete_graph'] = self.graph
@@ -198,16 +238,17 @@ class GridScenario(object):
                 name = name[0]+'_'+name[1]
                 scenario[name] = self.graph.subgraph(list(set)).copy()
         # save the pickle object of the scenario
-        scenario_name = self.name + '_G%s_D%s'%(self.N_gens,self.N_dist)
-        with open(scenario_name, 'wb') as handle:
+
+        #add agent list for the two types of grid to create
+        with open(self.name, 'wb') as handle:
             pickle.dump(scenario, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':
 
     net_data_path = '/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/mat_data419.mat'
-    scenario_name = 'CompleteNetwork'
+    scenario_name = 'CompleteNetwork_testconfig'
 
-    GridManager = GridScenario('CompleteGridNew')
+    GridManager = GridScenario(scenario_name)
     DH_net = GridManager.run()
     GridManager.save_object()
