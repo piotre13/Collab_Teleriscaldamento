@@ -1,5 +1,8 @@
 import aiomas
 import asyncio
+#from Utils import *
+import networkx as nx
+
 from mas import util
 import multiprocessing
 import sys
@@ -10,7 +13,9 @@ import pickle
 class Simulator(object):
 
 
-    def __init__(self, config):
+    def __init__(self, config, scenario):
+
+        self.config = config
         #paths
         self.paths = config['paths']
 
@@ -28,21 +33,27 @@ class Simulator(object):
         self.py_int = self.paths['py_interpreter']
 
         # knowledge of the system
-        self.scenario = None
+        self.scenario = scenario
         self.properties = config['properties']
-        self.distgrids = []
-        self.transp_grids =[]
+        #self.distgrids = []
+        #self.transp_grids =[]
+
+        #agents #used in new workflow
+        self.DHgrid = None
+        self.power_plants = {} #dict {name : (proxy, addr),}
+        self.utenze = {} #dict {name : (proxy, addr),}
+        self.substations = {} #dict {name : (proxy, addr),}
 
         # containers proxy
         self.main_container = None
         self.sub_containers = None
 
+
         #setting the Future
         self.cycle_done = asyncio.Future()
-
         #creating the scenario and the agents
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.create())
+        loop.run_until_complete(self.create_new())
 
         #reports
         self.report = {}
@@ -63,28 +74,72 @@ class Simulator(object):
             print('Error in the setting of time!')
             print(e)
 
-    async def create(self):
-        #main container start todo check if is needed
-        self.main_container = await aiomas.Container.create((self.host, self.port), as_coro=True, clock=self.clock, codec=aiomas.MsgPackBlosc, extra_serializers=[util.get_np_serializer])
-        #start subcontainers
+    async def create_new(self):
+        # main container start # may not need this
+        self.main_container = await aiomas.Container.create((self.host, self.port), as_coro=True, clock=self.clock,
+                                                           codec=aiomas.MsgPackBlosc,
+                                                           extra_serializers=[util.get_np_serializer])
+
+        # start subcontainers their are actuall the only containers
         self.sub_containers = await self.start_sub_containers()  # >> list of tuples (process, container_proxy)
 
-        #read pickle scenario file
-        with open(self.paths['grid_data'], 'rb') as f:
-            self.scenario = pickle.load(f)
-            f.close()
+        #create the DHGrid agent (which is manager) in the main container
+        agent = 'DH-Grid'
+        proxy, address = await self.sub_containers[0][1].spawn(
+            'mas.DHGrid:DHGrid.create', agent, self.config, self.ts_size)
+        self.DHgrid = (proxy, address)
 
-        transp_list = [i for i in self.scenario.keys() if 'transp' in i]
-        dist_list = [i for i in self.scenario.keys() if 'dist' in i]
-        inputdata = util.read_data(self.paths['input_data'])
-        netdata =  util.read_data(self.paths['net_data'])
-        UserNode = netdata['UserNode']
-        BCT = netdata['BCT']
+        #then creating all the agents spawning to all sub containers
+        #need to pass the DHGrid address for registering
+        #todo when tested change the classes name removing test both in source and in create_agent methods
+        utenze = [x for x,y in self.scenario.nodes(data=True) if y['type']== 'Utenza']
+        substations = [x for x,y in self.scenario.nodes(data=True) if y['type']== 'BCT']
+        power_plants = [x for x,y in self.scenario.nodes(data=True) if y['type']== 'Gen']
+        await self.create_Utenza(utenze)
+        await self.create_BCT(substations)
+        await self.create_Gen(power_plants)
 
-        #CREATING
-        transp_addr = await self.create_transpGrid(transp_list) # creating the transport grid
-        await self.create_distGrid(dist_list, UserNode, BCT, inputdata, transp_addr) # TODO the dist grid must register to the transp grid
-        print('CREATION of AGENTS successfully completed!\n')
+    async def create_Gen(self, power_plants):
+        num = 0
+        for agent in power_plants:
+            container = self.sub_containers[num % len(self.sub_containers)][1]
+            # this will return a proxy object to aggr agent and its address
+            # and trigger the create @classmethod in DistGrid_agent
+            #node_attr = nx.get_node_attributes(self.scenario, agent)
+            node_attr = self.scenario.nodes[agent]
+            sub_addr = [(y, x[1]) for y, x in self.substations.items()]
+            proxy, address = await container.spawn(
+                'mas.Gen_plant:GenerationPlant_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size, sub_addr)
+            self.power_plants[agent] = (proxy,address)
+            num += 1
+
+    async def create_BCT(self, substations):
+        num = 0
+        for agent in substations:
+            container = self.sub_containers[num % len(self.sub_containers)][1]
+            # this will return a proxy object to aggr agent and its address
+            # and trigger the create @classmethod in DistGrid_agent
+            #node_attr = nx.get_node_attributes(self.scenario, agent)
+            node_attr = self.scenario.nodes[agent]
+            group = node_attr['group'].split('-')[1]
+            ut_addr = [(y,x[1]) for y, x in self.utenze.items() if group in y ]
+            proxy, address = await container.spawn(
+                'mas.Sottostazione:Sottostazione_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size, ut_addr )
+            self.substations[agent] = (proxy, address)
+            num += 1
+
+    async def create_Utenza(self, utenze):
+        num = 0
+        for agent in utenze:
+            container = self.sub_containers[num % len(self.sub_containers)][1]
+            # this will return a proxy object to aggr agent and its address
+            # and trigger the create @classmethod in DistGrid_agent
+            #node_attr = nx.get_node_attributes(self.scenario, agent) # todo this does not work because teh attributes are not added to the graph but only to nodes
+            node_attr = self.scenario.nodes[agent]
+            proxy, address = await container.spawn(
+                'mas.Utenza:Utenza_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size )
+            self.utenze[agent] = (proxy, address)
+            num += 1
 
     async def start_sub_containers(self):
         ''' This function starts a container for each on eof the machine cores.
@@ -113,33 +168,6 @@ class Simulator(object):
         # Return a list of "(proc, container_proxy)" tuples:
         return [(p, c) for p, c in zip(procs, containers)]
 
-    async def create_transpGrid(self, transp_list):
-        '''This function creates as many transmission grid agents as many item are present in transp_list
-        usually is only one. Each one of the agents created is assigned to a specific subcontainer and spawned '''
-        num = 0
-        for net_name in transp_list:
-            container = self.sub_containers[num % len(self.sub_containers)][1]
-            # this will return a proxy object to aggr agent and its address
-            # and trigger the create @classmethod in DistGrid_agent
-            proxy, address = await container.spawn(
-                'mas.TransportGrid:TranspGrid.create', net_name,self.paths['grid_data'], num, self.properties, self.ts_size )
-            self.transp_grids.append((proxy, address))
-            num+=1
-        return address
-
-    async def create_distGrid(self, dist_list, UserNode, BCT, inputdata, transp_addr):
-        '''This function creates as many distribution grid agents as many item are present in transp_list
-             Each one of the agents created is assigned to a specific subcontainer and spawned '''
-        num = 0 #TODO ensure that num coincides with the num in the net_name
-        for net_name in dist_list:
-            container = self.sub_containers[num % len(self.sub_containers)][1]
-            # this will return a proxy object to aggr agent and its address
-            # and trigger the create @classmethod in DistGrid_agent
-            proxy, address = await container.spawn(
-                'mas.DistributionGrid:DistGrid.create', net_name,self.paths['grid_data'], num, UserNode, BCT, inputdata, self.properties, self.ts_size, transp_addr)
-            self.distgrids.append((proxy, address))
-            num+=1
-
     #@profile
     async def run(self):
         '''
@@ -157,12 +185,13 @@ class Simulator(object):
 
             # testing try block
             try:
-                #FIRST stepping the distribution grids
-                futs = [grid[0].step() for grid in self.distgrids]
-                await asyncio.gather(*futs) # making the step for all the distgrids mandata + ritorno
-                #SECOND stepping the transport grid
-                futs = [grid[0].step() for grid in self.transp_grids]
-                await asyncio.gather(*futs)
+                await self.DHgrid[0].step()
+                # #FIRST stepping the distribution grids
+                # futs = [grid[0].step() for grid in self.distgrids]
+                # await asyncio.gather(*futs) # making the step for all the distgrids mandata + ritorno
+                # #SECOND stepping the transport grid
+                # futs = [grid[0].step() for grid in self.transp_grids]
+                # await asyncio.gather(*futs)
 
             except Exception as e:
                 await self.finalize()
@@ -223,3 +252,64 @@ class Simulator(object):
         await asyncio.gather(*futs)
 
         await self.main_container.shutdown(as_coro=True)
+
+
+
+
+    # todo OLD creation process deletae when new one is fine
+    # async def create(self):
+    #     # main container start todo check if is needed
+    #     self.main_container = await aiomas.Container.create((self.host, self.port), as_coro=True, clock=self.clock,
+    #                                                         codec=aiomas.MsgPackBlosc,
+    #                                                         extra_serializers=[util.get_np_serializer])
+    #     # start subcontainers
+    #     self.sub_containers = await self.start_sub_containers()  # >> list of tuples (process, container_proxy)
+    #
+    #     # read pickle scenario file
+    #     with open(self.paths['grid_data'], 'rb') as f:
+    #         self.scenario = pickle.load(f)
+    #         f.close()
+    #
+    #     transp_list = [i for i in self.scenario.keys() if 'transp' in i]
+    #     dist_list = [i for i in self.scenario.keys() if 'dist' in i]
+    #     inputdata = util.read_data(self.paths['input_data'])
+    #     netdata = util.read_data(self.paths['net_data'])
+    #     UserNode = netdata['UserNode']
+    #     BCT = netdata['BCT']
+    #
+    #     # CREATING
+    #     transp_addr = await self.create_transpGrid(transp_list)  # creating the transport grid
+    #     await self.create_distGrid(dist_list, UserNode, BCT, inputdata,
+    #                                transp_addr)  # TODO the dist grid must register to the transp grid
+    #     print('CREATION of AGENTS successfully completed!\n')
+    #
+    # async def create_transpGrid(self, transp_list):
+    #     '''This function creates as many transmission grid agents as many item are present in transp_list
+    #     usually is only one. Each one of the agents created is assigned to a specific subcontainer and spawned '''
+    #     num = 0
+    #     for net_name in transp_list:
+    #         container = self.sub_containers[num % len(self.sub_containers)][1]
+    #         # this will return a proxy object to aggr agent and its address
+    #         # and trigger the create @classmethod in DistGrid_agent
+    #         proxy, address = await container.spawn(
+    #             'mas.TransportGrid:TranspGrid.create', net_name, self.paths['grid_data'], num, self.properties,
+    #             self.ts_size)
+    #         self.transp_grids.append((proxy, address))
+    #         num += 1
+    #     return address
+    #
+    # async def create_distGrid(self, dist_list, UserNode, BCT, inputdata, transp_addr):
+    #     '''This function creates as many distribution grid agents as many item are present in transp_list
+    #          Each one of the agents created is assigned to a specific subcontainer and spawned '''
+    #     num = 0  # TODO ensure that num coincides with the num in the net_name
+    #     for net_name in dist_list:
+    #         container = self.sub_containers[num % len(self.sub_containers)][1]
+    #         # this will return a proxy object to aggr agent and its address
+    #         # and trigger the create @classmethod in DistGrid_agent
+    #         proxy, address = await container.spawn(
+    #             'mas.DistributionGrid:DistGrid.create', net_name, self.paths['grid_data'], num, UserNode, BCT,
+    #             inputdata, self.properties, self.ts_size, transp_addr)
+    #         self.distgrids.append((proxy, address))
+    #         num += 1
+    #
+    #

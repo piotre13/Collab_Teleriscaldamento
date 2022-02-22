@@ -64,18 +64,28 @@ class GridScenario(object):
             data['D'] = data['D'] * self.config['Transp_properties']['D_mul']
             mapping[edge] = data
 
+        nx.set_edge_attributes(self.graph,'transp', 'group')
+
+        #relabelling the nodes with 'transp+index'
+        for node in  self.graph.nodes():
+            mapping[node] = 'transp_' + str(node)  # creating the mapping for relabelling
+        self.graph = nx.relabel_nodes(self.graph, mapping)
+
         #ADDING DISTRIBUTION GRIDS
         self.add_distribution(sample_graph)
-        self.show_graph()
+
         # ADDING COMPONENTS
         #connecting grids
-        self.connecting_grids()
+        #self.connecting_grids() # no more need connection is done when creating dist grids look ad add_dist
 
         # adding more generators (Centrali)
         self.add_Generators()
 
         # adding storages
         self.add_Storages()
+
+        #visualizing
+        self.show_graph()
 
 
     def incidence2graph(self, mat_data):
@@ -126,34 +136,46 @@ class GridScenario(object):
         for n in self.Dist_conf['Grids']:
             prefix = 'dist_%s' % n
             mapping = {}
-            for node, type in sample_graph.nodes(data='type'):
+            for node in sample_graph.nodes:
                 mapping[node] = prefix+ '_' + str(node)  # creating the mapping for relabelling
-
             dist_graph = nx.relabel_nodes(sample_graph, mapping)
+
             for node in dist_graph:
                 dist_graph.nodes[node]['group'] = prefix
                 dist_graph.nodes[node]['storages'] = []
 
+            nx.set_edge_attributes(dist_graph,prefix,'group')
+
+            dist_graph = self.connecting_BCT(n, dist_graph)
             #dist_graph.graph['type'] = 'distribution'
             # COMPOSING THE WHOLE NEW GRAPH WITH TRANSPORT AND DISTRIBUTION
             self.graph = nx.compose(self.graph, dist_graph)
 
 
-    def connecting_grids(self):
+    def connecting_BCT(self, n, dist_graph):
 
-        for n, connection in self.Dist_conf['Grids'].items():
-            BCT_nodes = self.get_BCT_nodes('dist_%s' % n)
-            free_nodes = self.get_free_nodes('transp')
+        #for n, connection in self.Dist_conf['Grids'].items():
+        BCT_nodes = [x for x,y in dist_graph.nodes (data=True) if y['type']=='BCT' ]
+        free_nodes = self.get_free_nodes('transp')
+        connections = self.Dist_conf['Grids'][n]
 
-            assert len(free_nodes) > len(BCT_nodes), "Not enough free nodes in Transport grid for connecting all BCT"
-            for BCT, con in zip(BCT_nodes, connection):
-                if con in free_nodes:
-                    self.graph.nodes[BCT]['connection'] = connection
-                    self.graph.nodes[con]['connection'] = BCT
-                    self.graph.nodes[con]['type'] = 'BCT'
-                else:
-                    raise ValueError (' The specified connections for Dist grid %s are wrong'%n)
-                    #TODO  possible random assignment when config connections are wrong
+        assert len(free_nodes) > len(BCT_nodes), "Not enough free nodes in Transport grid for connecting all BCT"
+        mapping = {}
+        for BCT, con in zip(BCT_nodes, connections):
+            if con in free_nodes:
+                mapping[BCT] = con
+                mix_group = 'transp-'+dist_graph.nodes[BCT]['group']
+                dist_graph.nodes[BCT]['group'] = mix_group
+                #nx.relabel_nodes(dist_graph,{BCT:con})
+                # self.graph.nodes[BCT]['connection'] = connection
+                # self.graph.nodes[con]['connection'] = BCT
+                # self.graph.nodes[con]['type'] = 'BCT'
+            else:
+                raise ValueError (' The specified connections for Dist grid %s are wrong'%n)
+                #TODO  possible random assignment when config connections are wrong
+            dist_graph = nx.relabel_nodes(dist_graph, mapping)
+
+        return dist_graph
 
 
     def add_Generators (self):
@@ -227,18 +249,18 @@ class GridScenario(object):
         pass
 
     def save_object(self):
-        scenario = {}
-        scenario['complete_graph'] = self.graph
-        nodes_sets = list(nx.weakly_connected_components(self.graph))
-        for set in nodes_sets:
-            if type(list(set)[0]) == int:
-                scenario['transp'] = self.graph.subgraph(list(set)).copy()
-            else:
-                name = list(set)[0]#.split('_')
-                name = name[0]+'_'+name[1]
-                scenario[name] = self.graph.subgraph(list(set)).copy()
+        #scenario = {}
+        # scenario['complete_graph'] = self.graph
+        # nodes_sets = list(nx.weakly_connected_components(self.graph))
+        # for set in nodes_sets:
+        #     if type(list(set)[0]) == int:
+        #         scenario['transp'] = self.graph.subgraph(list(set)).copy()
+        #     else:
+        #         name = list(set)[0]#.split('_')
+        #         name = name[0]+'_'+name[1]
+        #         scenario[name] = self.graph.subgraph(list(set)).copy()
         # save the pickle object of the scenario
-
+        scenario = self.graph
         #add agent list for the two types of grid to create
         with open(self.name, 'wb') as handle:
             pickle.dump(scenario, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -247,7 +269,7 @@ class GridScenario(object):
 if __name__ == '__main__':
 
     net_data_path = '/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/mat_data419.mat'
-    scenario_name = 'CompleteNetwork_testconfig'
+    scenario_name = 'CompleteNetwork_final'
 
     GridManager = GridScenario(scenario_name)
     DH_net = GridManager.run()

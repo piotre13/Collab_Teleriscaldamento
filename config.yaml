@@ -4,6 +4,7 @@ paths:
   input_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
   net_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
   py_interpreter: '/home/pietrorm/Environments/District_heating/bin/python' # no need
+  scenario: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_final"
 
 # Scenario creation: **************************************
 ScenarioCreation:
@@ -19,33 +20,32 @@ ScenarioCreation:
 
   Distributions: # key:value pairs for distribution grids with the list of nodes id of the connection to transport
     Grids:
-      0: [193]
-      1: [119]
-      2: [81]
-      3: [93]
-      4: [114]
+      0: ['transp_193']
+      1: ['transp_119']
+      2: ['transp_81']
+      3: ['transp_93']
+      4: ['transp_114']
 
 
 
   Generators:  # key:value pairs for generators with the node id of the position
-    0: 4
+    0: 'transp_4'
 
   Storages:     # key:value pairs for storages with the node id of the position (could be any node of the whole system)
-    0: 4
-    1: 4
-    2: 4
-    3: 'dist_0_45'
-    4: 'dist_0_183'
+    #NB se voglio mettere storages nelle BCT devo usare i nomi che avranno nella grid finale quindi gli stessi delle connessioni li sopra
+    0: 'transp_4'
+    1: 'transp_4'
+    2: 'transp_4'
 
 
   sto_schedule:
-    1:
+    0:
       charge: !!python/tuple ['0am','4am']
       discharge: !!python/tuple ['5am','7am']
-    2:
+    1:
       charge: !!python/tuple [ '0am','4am' ]
       discharge: !!python/tuple [ '5am','7am' ]
-    3:
+    2:
       charge: !!python/tuple [ '0am','4am' ]
       discharge: !!python/tuple [ '5am','7am' ]
 #***********************************************************
