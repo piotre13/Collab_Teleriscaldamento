@@ -4,6 +4,20 @@ __email__ = 'pietro.randomazzarino@polito.it'
 
 '''here we keep the functions used as modelling calculation for the district heating network'''
 
+import networkx as nx
+import numpy as np
+
+def get_incidence_matrix(graph):
+    # todo use sparse maybe better...
+    node_list = sorted(list(graph.nodes))
+    edge_list = sorted(graph.edges(data=True), key=lambda t: t[2].get('NB', 1))
+    NN = len(node_list)
+    NB = len(edge_list)
+    graph_matrix = nx.incidence_matrix(graph, nodelist=node_list, edgelist=edge_list,
+                                       oriented=True).todense().astype(int)
+    graph_matrix = np.array(graph_matrix)
+    return graph_matrix, NN, NB, node_list, edge_list
+
 
 def create_matrices(G, G_ext, T, dir): # TODO generalize
     ''' la T sta per T immissione e può essere o quella delle utenze o quella delle BCT

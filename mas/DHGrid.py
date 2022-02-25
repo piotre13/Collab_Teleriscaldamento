@@ -9,7 +9,7 @@ Matrix calculation smust be parallelized by dividing them in portions that are c
 import aiomas
 import asyncio
 from Utils import *
-from models.DHGrid_model import create_matrices, eq_continuità, create_Gext
+from models.DHGrid_model import create_matrices, eq_continuità, create_Gext, get_incidence_matrix
 
 
 class DHGrid(aiomas.Agent):
@@ -22,6 +22,8 @@ class DHGrid(aiomas.Agent):
         #scenario knowledge
         self.config = config
         self.scenario = read_scenario(self.config['paths']['scenario'])
+        self.graph = self.scenario['graph']
+        self.groups = self.scenario['groups']
 
         #connected agents
         self.substations = {}
@@ -85,13 +87,11 @@ class DHGrid(aiomas.Agent):
         G_ALL = await self.gathering_G()
         #print(G_ALL)
         T_ALL = await self.gathering_T('mandata')
-        print(T_ALL)
-
         #make a test and extract a subgraph
-        H = self.scenario.subgraph([node for node, node_data in self.scenario.nodes(data=True) if node_data['group']== 'dist_0'])
+        H = self.graph.subgraph([node for node, node_data in self.graph.nodes(data=True) if node_data['group']== 'dist_0'])
         print(H)
         #1. calc mandata transport
-
+        self.prepare_inputs()
         #2. calc mandata distributions (parallel execution)
         #3. calc ritorno distributions (parallel execution)
         #4. calc ritorno transport
@@ -100,9 +100,15 @@ class DHGrid(aiomas.Agent):
     def static_calculation_data(self):
         '''should fill here all the data that does not change'''
         self.properties = self.config['properties']
-        self.group_list = 
         #initialize the calculation variables
-        self.Ix = {}
+        self.group_info = {}
+        for group in self.groups:
+            self.group_info[group] = {}
+            self.group_info[group]['subgraph']= self.graph.subgraph([node for node, node_data in self.graph.nodes(data=True) if node_data['group']== group])
+            subG = self.add_BCT2subG(self.group_info[group]['subgraph'])
+            subg_info = get_incidence_matrix(subG)
+            self.group_info[group]['Ix']= 0
+
 
     async def gathering_G(self):
         G = []
@@ -133,13 +139,3 @@ class DHGrid(aiomas.Agent):
 
         return T
 
-    def get_incidence_matrix(self, graph):
-        # todo use sparse maybe better...
-        node_list = sorted(list(graph.nodes))
-        edge_list = sorted(graph.edges(data=True), key=lambda t: t[2].get('NB', 1))
-        NN = len(node_list)
-        NB = len(edge_list)
-        graph_matrix = nx.incidence_matrix(graph, nodelist=node_list, edgelist=edge_list,
-                                           oriented=True).todense().astype(int)
-        graph_matrix = np.array(graph_matrix)
-        return graph_matrix, NN, NB, node_list, edge_list

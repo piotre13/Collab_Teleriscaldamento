@@ -26,6 +26,9 @@ class GridScenario(object):
         self.Dist_conf = self.config['Distributions']
         self.Sto_conf = self.config['Storages']
         self.Gen_conf = self.config['Generators']
+        self.scenario = {}
+        self.scenario['graph'] = None
+        self.scenario['groups'] = []
 
     def run(self):
         ''' main function of the class '''
@@ -49,6 +52,7 @@ class GridScenario(object):
 
         # updating nodes attributes for the transport grid
         #HERE WHERE TO ADD ATTRIBUTE KEYS
+        self.scenario['groups'].append('transp')
         for node in self.graph.nodes:
             self.graph.nodes[node]['group'] = 'transp'
             self.graph.nodes[node]['storages']=[]
@@ -135,6 +139,7 @@ class GridScenario(object):
         # adding the distribution distgrids to the whole graph
         for n in self.Dist_conf['Grids']:
             prefix = 'dist_%s' % n
+            self.scenario['groups'].append(prefix)
             mapping = {}
             for node in sample_graph.nodes:
                 mapping[node] = prefix+ '_' + str(node)  # creating the mapping for relabelling
@@ -149,6 +154,7 @@ class GridScenario(object):
             dist_graph = self.connecting_BCT(n, dist_graph)
             #dist_graph.graph['type'] = 'distribution'
             # COMPOSING THE WHOLE NEW GRAPH WITH TRANSPORT AND DISTRIBUTION
+            self.scenario[prefix] = dist_graph
             self.graph = nx.compose(self.graph, dist_graph)
 
 
@@ -249,9 +255,9 @@ class GridScenario(object):
         pass
 
     def save_object(self):
-        #scenario = {}
-        # scenario['complete_graph'] = self.graph
-        # nodes_sets = list(nx.weakly_connected_components(self.graph))
+
+        self.scenario['graph'] = self.graph
+       #nected_components(self.graph))
         # for set in nodes_sets:
         #     if type(list(set)[0]) == int:
         #         scenario['transp'] = self.graph.subgraph(list(set)).copy()
@@ -260,10 +266,10 @@ class GridScenario(object):
         #         name = name[0]+'_'+name[1]
         #         scenario[name] = self.graph.subgraph(list(set)).copy()
         # save the pickle object of the scenario
-        scenario = self.graph
+        #scenario = self.graph
         #add agent list for the two types of grid to create
         with open(self.name, 'wb') as handle:
-            pickle.dump(scenario, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle.dump(self.scenario, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':

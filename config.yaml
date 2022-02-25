@@ -1,16 +1,16 @@
 ---
 paths:
   grid_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_G1_D5"
-  input_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
-  net_data: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  input_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/InData_interpolated.mat"
+  net_data: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
   py_interpreter: '/home/pietrorm/Environments/District_heating/bin/python' # no need
-  scenario: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_final"
+  scenario: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_final"
 
 # Scenario creation: **************************************
 ScenarioCreation:
   from_data: False # if True should have a datafile for the whole grid
   real_net: "" # path of the real grid datafile
-  sample_net: "/Users/pietrorandomazzarino/Documents/DOTTORATO/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
+  sample_net: "/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/NetData419.mat"
   #numDistGrids: 5 # when creating from sample number of distribution grid randomly connected
   #numGenerators: 1 # when creating from sample number of generators in place of sample_BCT
 
