@@ -64,9 +64,12 @@ class Sottostazione_test(aiomas.Agent):
         return G
 
     @aiomas.expose
-    async def get_T(self):
-        T = None
-        return(self.name, T)
+    async def get_T(self, direction):
+        if direction == 'mandata':
+            return (self.name, self.T_mandata)
+        elif direction == 'ritorno':
+            return (self.name, self.T_ritorno)
+
 
     @aiomas.expose
     async def get_G(self):

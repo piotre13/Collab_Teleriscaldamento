@@ -72,9 +72,11 @@ class Utenza_test(aiomas.Agent):
         return T
 
     @aiomas.expose
-    async def get_T(self):
-        T = None
-        return (self.name, T)
+    async def get_T(self, direction):
+        if direction == 'mandata':
+            return (self.name, self.T_in)
+        elif direction == 'ritorno':
+            return (self.name, self.T_out)
 
     @aiomas.expose # this is the correct one for G being G the same
     async def get_G(self):

@@ -82,9 +82,16 @@ class DHGrid(aiomas.Agent):
 
         #CALCULATIONS
         #GATHERING G THAT stays unvaried for all the timestep (need signs to be changed)
-        G_ALL = self.gathering_G()
+        G_ALL = await self.gathering_G()
+        #print(G_ALL)
+        T_ALL = await self.gathering_T('mandata')
+        print(T_ALL)
 
+        #make a test and extract a subgraph
+        H = self.scenario.subgraph([node for node, node_data in self.scenario.nodes(data=True) if node_data['group']== 'dist_0'])
+        print(H)
         #1. calc mandata transport
+
         #2. calc mandata distributions (parallel execution)
         #3. calc ritorno distributions (parallel execution)
         #4. calc ritorno transport
@@ -93,8 +100,9 @@ class DHGrid(aiomas.Agent):
     def static_calculation_data(self):
         '''should fill here all the data that does not change'''
         self.properties = self.config['properties']
+        self.group_list = 
         #initialize the calculation variables
-
+        self.Ix = {}
 
     async def gathering_G(self):
         G = []
@@ -106,25 +114,32 @@ class DHGrid(aiomas.Agent):
         G.append(await asyncio.gather(*futs))
         return G
 
-    async def gathering_T(self):
-        G = []
-        futs = [gen[0].get_G() for gen_n, gen in self.power_plants.items()]
-        G.append(await asyncio.gather(*futs))
-        futs = [sub[0].get_G() for sub_n, sub in self.substations.items()]
-        G.append(await asyncio.gather(*futs)) # 2 sottostazioni
-        futs = [utenza[0].get_G() for ut_n, utenza in self.utenze.items()]
-        G.append(await asyncio.gather(*futs))
-        return G
+    async def gathering_T(self, direction):
+        T = []
+        if direction == 'mandata':
+            #gathering T in mandata need only the inlet temperature for the substations we use the calculated tempertaures
+            futs = [gen[0].get_T(direction) for gen_n, gen in self.power_plants.items()]
+            T.append(await asyncio.gather(*futs))
+            #futs = [sub[0].get_T(direction) for sub_n, sub in self.substations.items()]
+            #T.append(await asyncio.gather(*futs)) # 2 sottostazioni
 
 
+        elif direction == 'ritorno':
 
+            futs = [sub[0].get_T(direction) for sub_n, sub in self.substations.items()]
+            T.append(await asyncio.gather(*futs))  # 2 sottostazioni
+            futs = [utenza[0].get_T(direction) for ut_n, utenza in self.utenze.items()]
+            T.append(await asyncio.gather(*futs))
 
+        return T
 
-
-
-    async def gathering_T(self):
-        pass
-    async def setting_G(self):
-        pass
-    async def setting_T(self):
-        pass
+    def get_incidence_matrix(self, graph):
+        # todo use sparse maybe better...
+        node_list = sorted(list(graph.nodes))
+        edge_list = sorted(graph.edges(data=True), key=lambda t: t[2].get('NB', 1))
+        NN = len(node_list)
+        NB = len(edge_list)
+        graph_matrix = nx.incidence_matrix(graph, nodelist=node_list, edgelist=edge_list,
+                                           oriented=True).todense().astype(int)
+        graph_matrix = np.array(graph_matrix)
+        return graph_matrix, NN, NB, node_list, edge_list

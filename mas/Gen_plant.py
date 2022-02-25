@@ -56,14 +56,15 @@ class GenerationPlant_test(aiomas.Agent):
         return G
 
     @aiomas.expose
-    async def get_T(self):
-        T = None
-        return (self.name, T)
+    async def get_T(self, direction):
+        if direction == 'mandata':
+            return (self.name, self.T_out)
+        elif direction == 'ritorno':
+            return (self.name, self.T_in)
 
     @aiomas.expose
     async def get_G(self):
-        T = None
-        return (self.name, T)
+        return (self.name, self.G)
 
     @aiomas.expose
     async def set_T(self):
