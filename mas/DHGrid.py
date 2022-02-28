@@ -9,7 +9,7 @@ Matrix calculation smust be parallelized by dividing them in portions that are c
 import aiomas
 import asyncio
 from Utils import *
-from models.DHGrid_model import create_matrices, eq_continuità, create_Gext, get_incidence_matrix
+from models.DHGrid_model import create_matrices, eq_continuità, create_Gext, get_incidence_matrix, get_line_params
 
 
 class DHGrid(aiomas.Agent):
@@ -52,20 +52,20 @@ class DHGrid(aiomas.Agent):
         return grid
 
     @aiomas.expose
-    async def register(self, agent_addr, agent_name, agent_type):
+    async def register(self, agent_addr, agent_name, agent_type, group='transp'):
         if agent_type == 'BCT':
             proxy = await self.container.connect(agent_addr, timeout=10)
-            self.substations[agent_name] = (proxy, agent_addr)
+            self.substations[agent_name] = (proxy, agent_addr,group)
             #print('registered sottostazione: %s at the main agent: %s' % (agent_name, self.name))
 
         if agent_type == 'GEN':
             proxy = await self.container.connect(agent_addr, timeout=10)
-            self.power_plants[agent_name] = (proxy, agent_addr)
+            self.power_plants[agent_name] = (proxy, agent_addr,group)
             #print('registered power plant: %s at the main agent: %s' % (agent_name, self.name))
 
         if agent_type == 'Utenza':
             proxy = await self.container.connect(agent_addr, timeout=10)
-            self.utenze[agent_name] = (proxy, agent_addr)
+            self.utenze[agent_name] = (proxy, agent_addr,group)
             #print('registered Utenza: %s at the main agent: %s' % (agent_name, self.name))
 
     @aiomas.expose
@@ -87,12 +87,12 @@ class DHGrid(aiomas.Agent):
         G_ALL = await self.gathering_G()
         #print(G_ALL)
         T_ALL = await self.gathering_T('mandata')
-        #make a test and extract a subgraph
-        H = self.graph.subgraph([node for node, node_data in self.graph.nodes(data=True) if node_data['group']== 'dist_0'])
-        print(H)
+
         #1. calc mandata transport
         self.prepare_inputs()
         #2. calc mandata distributions (parallel execution)
+        for group in self.groups[1:]:
+            pass
         #3. calc ritorno distributions (parallel execution)
         #4. calc ritorno transport
 
@@ -104,14 +104,40 @@ class DHGrid(aiomas.Agent):
         self.group_info = {}
         for group in self.groups:
             self.group_info[group] = {}
-            self.group_info[group]['subgraph']= self.graph.subgraph([node for node, node_data in self.graph.nodes(data=True) if node_data['group']== group])
-            subG = self.add_BCT2subG(self.group_info[group]['subgraph'])
-            subg_info = get_incidence_matrix(subG)
-            self.group_info[group]['Ix']= 0
+            self.group_info[group]['subgraph'] = self.scenario[group]
+            Ix, nn, nb, node_list, edge_list = get_incidence_matrix(self.scenario[group])
+            self.group_info[group]['Ix'] = Ix
+            self.group_info[group]['NN'] = nn
+            self.group_info[group]['NB'] = nb
+            self.group_info[group]['nodes'] = node_list
+            self.group_info[group]['edges'] = edge_list
+            D_ext, L = get_line_params(edge_list, self.config['properties']['branches']['D_ext']['c1'], self.config['properties']['branches']['D_ext']['c2'])
+            self.group_info[group]['D_ext'] = D_ext
+            self.group_info[group]['L'] = L
+            #initialize vectors for calculations
+            self.group_info[group]['T_mandata'] = []
+            self.group_info[group]['T_ritorno'] = []
+
+    # def prepare_inputs(self, dir):
+    #     if dir == 'mandata':
+    #         for group in self.groups:
+    #             pass
+    #
+    #
+    #
+    # def divide_gatherings(self,tuple_list):
+    #     dv_gathers = {}
+    #     for group in self.groups:
+    #         tp_list = []
+    #         for el in tuple_list:
+    #
+    #         dv_gathers[group] =
 
 
     async def gathering_G(self):
-        G = []
+        G = {}
+        for group in self.groups:
+            G[group] = []
         futs = [gen[0].get_G() for gen_n, gen in self.power_plants.items()]
         G.append(await asyncio.gather(*futs))
         futs = [sub[0].get_G() for sub_n, sub in self.substations.items()]
@@ -128,7 +154,6 @@ class DHGrid(aiomas.Agent):
             T.append(await asyncio.gather(*futs))
             #futs = [sub[0].get_T(direction) for sub_n, sub in self.substations.items()]
             #T.append(await asyncio.gather(*futs)) # 2 sottostazioni
-
 
         elif direction == 'ritorno':
 

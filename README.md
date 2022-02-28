@@ -5,9 +5,11 @@
 4. **NB** i nodi sono modellati con (T_in ,T_out) se nodi temrinali e con (T_mandata, T_ritorno) se nodi centrali (e.g substations)
 5. **DOMANDA** : ma se partiamo dalla conoscenza delle portate in utenza e non da quelle in centrale per calcolarci le portate in centrale nel caso ci fossero più centrali come facciamo?? dobbiamo configurare le porzioni percentauali del totale per spartirlo? o c'è un modo più intelligente 
 6. **NB** constraints:
-
    - le reti di distribuzione hano una e una sola stazione BCT (una rete di distribuzione è la porzione a valle di una BCT)
    - per ora funziona con solo una centrale 
+
+## Problems
+1. **agent creation**: troppo lenta... 300s circa
 #GRAPH STRUCTURE
 The whole grid, composed of transport and distribution, is represented using a graph structure:
    

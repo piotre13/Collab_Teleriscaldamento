@@ -47,7 +47,7 @@ class Utenza_test(aiomas.Agent):
         print('Created Utenza Agent: %s'%name)
 
         # registering
-        await DHGrid.register(utenza.addr, utenza.name, 'Utenza')
+        await DHGrid.register(utenza.addr, utenza.name, 'Utenza', node_attr['group'])
 
         return utenza
 
@@ -55,6 +55,7 @@ class Utenza_test(aiomas.Agent):
 
     @aiomas.expose
     async def step(self):
+
         ts = int(self.container.clock.time() / self.ts_size) # TIMESTEP OF THE SIMULATION
         if ts == 0:
             self.T_in = self.config['properties']['init']['T_utenza_in']

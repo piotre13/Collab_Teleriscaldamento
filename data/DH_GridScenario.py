@@ -74,6 +74,7 @@ class GridScenario(object):
         for node in  self.graph.nodes():
             mapping[node] = 'transp_' + str(node)  # creating the mapping for relabelling
         self.graph = nx.relabel_nodes(self.graph, mapping)
+        self.scenario['transp'] = self.graph
 
         #ADDING DISTRIBUTION GRIDS
         self.add_distribution(sample_graph)
@@ -150,11 +151,11 @@ class GridScenario(object):
                 dist_graph.nodes[node]['storages'] = []
 
             nx.set_edge_attributes(dist_graph,prefix,'group')
+            self.scenario[prefix] = dist_graph
 
             dist_graph = self.connecting_BCT(n, dist_graph)
             #dist_graph.graph['type'] = 'distribution'
             # COMPOSING THE WHOLE NEW GRAPH WITH TRANSPORT AND DISTRIBUTION
-            self.scenario[prefix] = dist_graph
             self.graph = nx.compose(self.graph, dist_graph)
 
 

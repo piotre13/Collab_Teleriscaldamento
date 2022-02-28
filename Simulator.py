@@ -92,9 +92,9 @@ class Simulator(object):
         #then creating all the agents spawning to all sub containers
         #need to pass the DHGrid address for registering
         #todo when tested change the classes name removing test both in source and in create_agent methods
-        utenze = [x for x,y in self.scenario.nodes(data=True) if y['type']== 'Utenza']
-        substations = [x for x,y in self.scenario.nodes(data=True) if y['type']== 'BCT']
-        power_plants = [x for x,y in self.scenario.nodes(data=True) if y['type']== 'Gen']
+        utenze = [x for x,y in self.scenario['graph'].nodes(data=True) if y['type']== 'Utenza']
+        substations = [x for x,y in self.scenario['graph'].nodes(data=True) if y['type']== 'BCT']
+        power_plants = [x for x,y in self.scenario['graph'].nodes(data=True) if y['type']== 'Gen']
         await self.create_Utenza(utenze)
         await self.create_BCT(substations)
         await self.create_Gen(power_plants)
@@ -106,7 +106,7 @@ class Simulator(object):
             # this will return a proxy object to aggr agent and its address
             # and trigger the create @classmethod in DistGrid_agent
             #node_attr = nx.get_node_attributes(self.scenario, agent)
-            node_attr = self.scenario.nodes[agent]
+            node_attr = self.scenario['graph'].nodes[agent]
             sub_addr = [(y, x[1]) for y, x in self.substations.items()]
             proxy, address = await container.spawn(
                 'mas.Gen_plant:GenerationPlant_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size, sub_addr)
@@ -120,7 +120,7 @@ class Simulator(object):
             # this will return a proxy object to aggr agent and its address
             # and trigger the create @classmethod in DistGrid_agent
             #node_attr = nx.get_node_attributes(self.scenario, agent)
-            node_attr = self.scenario.nodes[agent]
+            node_attr = self.scenario['graph'].nodes[agent]
             group = node_attr['group'].split('-')[1]
             ut_addr = [(y,x[1]) for y, x in self.utenze.items() if group in y ]
             proxy, address = await container.spawn(
@@ -135,7 +135,7 @@ class Simulator(object):
             # this will return a proxy object to aggr agent and its address
             # and trigger the create @classmethod in DistGrid_agent
             #node_attr = nx.get_node_attributes(self.scenario, agent) # todo this does not work because teh attributes are not added to the graph but only to nodes
-            node_attr = self.scenario.nodes[agent]
+            node_attr = self.scenario['graph'].nodes[agent]
             proxy, address = await container.spawn(
                 'mas.Utenza:Utenza_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size )
             self.utenze[agent] = (proxy, address)

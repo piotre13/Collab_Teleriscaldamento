@@ -44,7 +44,8 @@ class Sottostazione_test(aiomas.Agent):
         print('Created Sottostazione Agent: %s'%name)
 
         #registering
-        await DHGrid.register(sottostazione.addr, sottostazione.name, 'BCT')
+        group = node_attr['group'].split('-')[-1]
+        await DHGrid.register(sottostazione.addr, sottostazione.name, 'BCT',group)
         return sottostazione
 
 

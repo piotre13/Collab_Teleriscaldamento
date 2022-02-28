@@ -8,9 +8,9 @@ import networkx as nx
 import numpy as np
 
 def get_incidence_matrix(graph):
-    # todo use sparse maybe better...
-    node_list = sorted(list(graph.nodes))
-    edge_list = sorted(graph.edges(data=True), key=lambda t: t[2].get('NB', 1))
+    #ok
+    node_list = sorted(list(graph.nodes),key=lambda t: int(t.split('_')[-1]))
+    edge_list = sorted(list(graph.edges(data=True)), key=lambda t: t[2].get('NB', 1))
     NN = len(node_list)
     NB = len(edge_list)
     graph_matrix = nx.incidence_matrix(graph, nodelist=node_list, edgelist=edge_list,
@@ -18,25 +18,35 @@ def get_incidence_matrix(graph):
     graph_matrix = np.array(graph_matrix)
     return graph_matrix, NN, NB, node_list, edge_list
 
+def get_line_params(edge_list, c1, c2):
+    #ok
+    L = [l[2]['lenght'] for l in edge_list]
+    D = [d[2]['D'] for d in edge_list]
+    D_ext = []
+    for d in D:
+        d_e = d * c1 + 2 *c2
+        D_ext.append(d_e)
+    return D_ext, L
 
-def create_matrices(G, G_ext, T, dir): # TODO generalize
+def create_matrices(G, G_ext, T, dir, param): # TODO generalize
     ''' la T sta per T immissione e può essere o quella delle utenze o quella delle BCT
     in entrambi i casi è una lista di tuple (id,T)'''
 
     # NN,NB = self.netdata['A'].shape
-    NN = self.NN
-    NB = self.NB
-    L = self.L
-    D = self.D
-    D_ext = self.D_ext
-    U = self.prop['U']
-    Tinf = self.prop['T_inf']
-    rho = self.prop['rhow']
-    cp = self.prop['cpw']
+    NN = param['NN']
+    NB = param['NB'] #forse non serve
+    L = param['L']
+    D = param['D']
+    D_ext = param['D_ext']
+    U = param['U']
+    Tinf = param['T_inf']#forse non serve
+    rho = param['rho']
+    cp = param['cpw']
+    cTube = param['cTube']
 
-    if self.prop['branches']['Ctube']:
-        cpste = self.prop['branches']['cpste']
-        rhste = self.prop['branches']['rhste']
+    if cTube:
+        cpste = param['cpste']
+        rhste = param['rhste']
     else:
         cpste = 0.0
         rhste = 0.0
@@ -45,12 +55,12 @@ def create_matrices(G, G_ext, T, dir): # TODO generalize
         nodi_immissione = [int(x.split('_')[-1]) for x in self.generation_plants.keys()]
         nodi_estrazione = [x for z, x in self.BCT_indices.items()]
         T_immissione = T
-        graph = self.graph.copy()
+        graph = graph.copy()
     elif dir == 'ritorno':
         nodi_immissione = [x for z, x in self.BCT_indices.items()]
         nodi_estrazione = [int(x.split('_')[-1]) for x in self.generation_plants.keys()]
         T_immissione = T
-        graph = self.graph.reverse()
+        graph = graph.reverse()
     else:
         raise ValueError('Unknown direction!')
     # init the matrices
@@ -147,12 +157,35 @@ def create_matrices(G, G_ext, T, dir): # TODO generalize
 
     return M, K, f
 
-def create_Gext(self, G_sub, NN):
-    G_ext = np.zeros(self.graph.order())
+def create_Gext(self, G_all, group, NN):
+    G_gen = G_all[0]
+    G_sub = G_all [1]
+    G_ut = G_all [2]
+    #G_sto = G_all[3]
+
+    if group == 'transp':
+        G_ext = np.zeros(NN)
+        for el in G_sub:
+            ind = int(el[0].split('_')[-1])
+            G_ext[ind] = el[1]
+        for el in G_gen:
+            ind = int(el[0].split('_')[-1])
+            G_ext[ind] = el[1] * -1
+    else:
+        G_ext = np.zeros(NN)
+        for el in G_ut:
+            if group in el[0]:
+                ind = int(el[0].split('_')[-1])
+                G_ext[ind] = el[1]
+
+
+
+
+    G_ext = np.zeros(NN)
     for el in G_sub:
-        ind = self.get_BCT_index(el[0])
+        ind = int(el[0].split('_')[-1])
         G_ext[ind] = el[1]
-    G_GEN = np.sum(G_ext) * -1
+    G_GEN = G_gen * -1
     # in caso ci siano più sottopstazioni (ognuna contribuisce ugualmente alla portata)
     if len(self.generation_plants) > 1:
         G_gen = G_GEN / len(self.generation_plants)
