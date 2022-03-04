@@ -6,29 +6,12 @@ __email__ = 'pietro.randomazzarino@polito.it'
 
 import networkx as nx
 import numpy as np
+import math
+import scipy.sparse as sp
+from scipy.sparse import linalg as lng
 
-def get_incidence_matrix(graph):
-    #ok
-    node_list = sorted(list(graph.nodes),key=lambda t: int(t.split('_')[-1]))
-    edge_list = sorted(list(graph.edges(data=True)), key=lambda t: t[2].get('NB', 1))
-    NN = len(node_list)
-    NB = len(edge_list)
-    graph_matrix = nx.incidence_matrix(graph, nodelist=node_list, edgelist=edge_list,
-                                       oriented=True).todense().astype(int)
-    graph_matrix = np.array(graph_matrix)
-    return graph_matrix, NN, NB, node_list, edge_list
 
-def get_line_params(edge_list, c1, c2):
-    #ok
-    L = [l[2]['lenght'] for l in edge_list]
-    D = [d[2]['D'] for d in edge_list]
-    D_ext = []
-    for d in D:
-        d_e = d * c1 + 2 *c2
-        D_ext.append(d_e)
-    return D_ext, L
-
-def create_matrices(G, G_ext, T, dir, param): # TODO generalize
+def create_matrices(graph, G, G_ext, T, dir, param, immissione, estrazione, ts_size): # TODO generalize
     ''' la T sta per T immissione e può essere o quella delle utenze o quella delle BCT
     in entrambi i casi è una lista di tuple (id,T)'''
 
@@ -39,7 +22,7 @@ def create_matrices(G, G_ext, T, dir, param): # TODO generalize
     D = param['D']
     D_ext = param['D_ext']
     U = param['U']
-    Tinf = param['T_inf']#forse non serve
+    T_inf = param['T_inf']#forse non serve
     rho = param['rho']
     cp = param['cpw']
     cTube = param['cTube']
@@ -51,18 +34,26 @@ def create_matrices(G, G_ext, T, dir, param): # TODO generalize
         cpste = 0.0
         rhste = 0.0
 
+
+    nodi_immissione = immissione
+    nodi_estrazione = estrazione
+    T_immissione = T
+
     if dir == 'mandata':
-        nodi_immissione = [int(x.split('_')[-1]) for x in self.generation_plants.keys()]
-        nodi_estrazione = [x for z, x in self.BCT_indices.items()]
-        T_immissione = T
         graph = graph.copy()
+        mapping={}
+        for node in  graph.nodes():
+            mapping[node] = int(node.split('_')[-1])  # creating the mapping for relabelling
+        graph = nx.relabel_nodes(graph, mapping)
     elif dir == 'ritorno':
-        nodi_immissione = [x for z, x in self.BCT_indices.items()]
-        nodi_estrazione = [int(x.split('_')[-1]) for x in self.generation_plants.keys()]
-        T_immissione = T
         graph = graph.reverse()
+        mapping={}
+        for node in  graph.nodes():
+            mapping[node] = int(node.split('_')[-1])  # creating the mapping for relabelling
+        graph = nx.relabel_nodes(graph, mapping)
     else:
         raise ValueError('Unknown direction!')
+
     # init the matrices
     K = np.zeros([NN, NN])
     # K = sp.csr_matrix((NN,NN))
@@ -75,11 +66,11 @@ def create_matrices(G, G_ext, T, dir, param): # TODO generalize
         id_out = e[0]
         id_in = e[1]
 
-        M_vec[id_out] = M_vec[id_out] + rho * cp / self.ts_size * math.pi * D[nb] ** 2 / 4 * L[nb] / 2 \
-                        + rhste * cpste / self.ts_size * math.pi \
+        M_vec[id_out] = M_vec[id_out] + rho * cp / ts_size * math.pi * D[nb] ** 2 / 4 * L[nb] / 2 \
+                        + rhste * cpste / ts_size * math.pi \
                         * (D_ext[nb] ** 2 - D[nb] ** 2) / 4 * L[nb] / 2
-        M_vec[id_in] = M_vec[id_in] + rho * cp / self.ts_size * math.pi * D[nb] ** 2 / 4 * L[nb] / 2 \
-                       + rhste * cpste / self.ts_size * math.pi \
+        M_vec[id_in] = M_vec[id_in] + rho * cp / ts_size * math.pi * D[nb] ** 2 / 4 * L[nb] / 2 \
+                       + rhste * cpste / ts_size * math.pi \
                        * (D_ext[nb] ** 2 - D[nb] ** 2) / 4 * L[nb] / 2
 
     for i in range(NN):  # loop nodi
@@ -93,7 +84,7 @@ def create_matrices(G, G_ext, T, dir, param): # TODO generalize
 
                 K[i, i] = K[i, i] + ((l * math.pi * d * U) / 2)  # posizioni sulla diagonale
 
-                f[i] = f[i] + ((l * math.pi * d * U * self.prop['T_inf']) / 2)  # vettore f per branches uscenti
+                f[i] = f[i] + ((l * math.pi * d * U * T_inf) / 2)  # vettore f per branches uscenti
 
                 ed_id = ed[0]
                 K[i, ed_id] = - cp * G[graph.get_edge_data(*ed)['NB']]  # posizioni (nodo entrante, nodo uscente)d
@@ -106,7 +97,7 @@ def create_matrices(G, G_ext, T, dir, param): # TODO generalize
                 K[i, i] = K[i, i] + cp * G[graph.get_edge_data(*ed)['NB']] + (
                             (l * math.pi * d * U) / 2)  # posizioni sulla diagonale
 
-                f[i] = f[i] + ((l * math.pi * d * U * self.prop['T_inf']) / 2)
+                f[i] = f[i] + ((l * math.pi * d * U * T_inf) / 2)
 
         # nodi estremi (imm ed estr)
         else:
@@ -120,10 +111,10 @@ def create_matrices(G, G_ext, T, dir, param): # TODO generalize
 
                     K[i, i] = cp * G[nb] + L[nb] * math.pi * D[nb] * U / 4
 
-                    f[i] = L[nb] * math.pi * D[nb] * U * self.prop['T_inf'] / 2
+                    f[i] = L[nb] * math.pi * D[nb] * U * T_inf / 2
 
-                    M_vec[i] = rho * cp / self.ts_size * math.pi * D[nb] ** 2 / 4 * L[nb] / 2 \
-                               + rhste * cpste / self.ts_size * math.pi * (D_ext[nb] ** 2 - D[nb] ** 2) / 4 * L[nb] / 2
+                    M_vec[i] = rho * cp / ts_size * math.pi * D[nb] ** 2 / 4 * L[nb] / 2 \
+                               + rhste * cpste / ts_size * math.pi * (D_ext[nb] ** 2 - D[nb] ** 2) / 4 * L[nb] / 2
 
                 out_edges = list(graph.out_edges(i))
                 for ed in out_edges:
@@ -132,9 +123,9 @@ def create_matrices(G, G_ext, T, dir, param): # TODO generalize
                         ed_id = ed[1]
                         K[i, ed_id] = - cp * G[nb] + L[nb] * math.pi * D[nb] * U / 4
                         K[i, i] = cp * G[nb] + L[nb] * math.pi * D[nb] * U / 4
-                        f[i] = L[nb] * math.pi * D[nb] * U * self.prop['T_inf'] / 2
-                        M_vec[i] = rho * cp / self.ts_size * math.pi * D[nb] ** 2 / 4 * L[nb] / 2 \
-                                   + rhste * cpste / self.ts_size * math.pi * (D_ext[nb] ** 2 - D[nb] ** 2) / 4 * L[
+                        f[i] = L[nb] * math.pi * D[nb] * U * T_inf / 2
+                        M_vec[i] = rho * cp / ts_size * math.pi * D[nb] ** 2 / 4 * L[nb] / 2 \
+                                   + rhste * cpste / ts_size * math.pi * (D_ext[nb] ** 2 - D[nb] ** 2) / 4 * L[
                                        nb] / 2
 
             elif i in nodi_immissione:
@@ -145,9 +136,11 @@ def create_matrices(G, G_ext, T, dir, param): # TODO generalize
                         K[i, :] = 0
                         K[i, i] = 1
                         # todo should change this for the temperature could be aranged in a vector at the beginning ???
+                        pos = 0
                         for j in T_immissione:
-                            if j[0] == i:
-                                T = j[1]
+                            if pos == i:
+                                T = j
+                            pos+=1
                         f[i] = T
                         M_vec[i] = 0
 
@@ -157,44 +150,26 @@ def create_matrices(G, G_ext, T, dir, param): # TODO generalize
 
     return M, K, f
 
-def create_Gext(self, G_all, group, NN):
-    G_gen = G_all[0]
-    G_sub = G_all [1]
-    G_ut = G_all [2]
-    #G_sto = G_all[3]
-
+def create_Gvect(G, group, NN):
+#ok
     if group == 'transp':
         G_ext = np.zeros(NN)
-        for el in G_sub:
+        for el in G[0]: #generators
+            ind = int(el[0].split('_')[-1])
+            G_ext[ind] = el[1]* -1
+        for el in G[1]: #substations
             ind = int(el[0].split('_')[-1])
             G_ext[ind] = el[1]
-        for el in G_gen:
-            ind = int(el[0].split('_')[-1])
-            G_ext[ind] = el[1] * -1
     else:
+        #todo must add the G_from substation as *-1 in BCT calc
         G_ext = np.zeros(NN)
-        for el in G_ut:
-            if group in el[0]:
-                ind = int(el[0].split('_')[-1])
-                G_ext[ind] = el[1]
+        for el in G[0]:#utenze
+            ind = int(el[0].split('_')[-1])
+            G_ext[ind] = el[1]
+        # for el in G[1]:#storages uncomment when using storages in distribution grids
+        #     ind = int(el[0].split('_')[-1])
+        #     G_ext[ind] = el[1]
 
-
-
-
-    G_ext = np.zeros(NN)
-    for el in G_sub:
-        ind = int(el[0].split('_')[-1])
-        G_ext[ind] = el[1]
-    G_GEN = G_gen * -1
-    # in caso ci siano più sottopstazioni (ognuna contribuisce ugualmente alla portata)
-    if len(self.generation_plants) > 1:
-        G_gen = G_GEN / len(self.generation_plants)
-        for id in self.generation_plants:
-            index = int(id.split('_')[-1])
-            G_ext[index] = G_gen
-    else:
-        index = int(list(self.generation_plants.keys())[0].split('_')[-1])
-        G_ext[index] = G_GEN
     return G_ext
 
 
@@ -206,3 +181,8 @@ def eq_continuità(Ix, G_ext):
     G[G < 0] = G[G < 0] * -1  # making it positive
     return G
 
+def calc_temperatures( M , K , f, T):
+    #ok
+    #using sparse matrices
+    T = lng.spsolve((M+K),(f+M.dot(T)))
+    return T

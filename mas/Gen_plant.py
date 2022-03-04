@@ -25,6 +25,7 @@ class GenerationPlant_test(aiomas.Agent):
         self.P = None
 
         # history records
+        self.P_hist =[]
 
 
     @classmethod
@@ -46,11 +47,15 @@ class GenerationPlant_test(aiomas.Agent):
         ts = int(self.container.clock.time() / self.ts_size)  # TIMESTEP OF THE SIMULATION
         self.T_out = self.config['properties']['init']['T_gen'] # impongo la temperatura di centrale sempre!
         self.G = await self.gather_G()
-        print('dummy step performed')
+
+    @aiomas.expose
+    async def calc_P(self):
+        self.P = self.G * self.config['properties']['cpw'] * (self.T_out - self.T_in)
+        self.P_hist.append(self.P)
 
     async def gather_G(self):
         futs = [sub.get_G() for sub_n, sub in self.substations_proxy.items()]
-        G_subs = await asyncio.gather(*futs)  # 1 utenze
+        G_subs = await asyncio.gather(*futs)  # 1 substations
         G = sum([x[1] for x in G_subs])  # simply summing all the flows from utenze
         # todo check the flows are all positive they should be
         return G
@@ -67,9 +72,11 @@ class GenerationPlant_test(aiomas.Agent):
         return (self.name, self.G)
 
     @aiomas.expose
-    async def set_T(self):
-        T = None
-        return (self.name, T)
+    async def set_T(self,T, dir):
+        if dir == 'ritorno':
+            self.T_in = T
+        else:
+            self.T_out = T
 
     @aiomas.expose
     async def set_G(self):

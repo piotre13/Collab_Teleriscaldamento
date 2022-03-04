@@ -2,6 +2,31 @@ from mat4py import loadmat, savemat
 import numpy as np
 import networkx as nx
 from pyvis.network import Network
+import pickle
+
+
+def read_scenario(path):
+    with open(path, 'rb') as f:
+        scenario = pickle.load(f)
+        f.close()
+    return scenario
+
+
+scenario = read_scenario('/home/pietrorm/Documents/CODE/Collab_Teleriscaldamento/data/CompleteNetwork_final')
+print(scenario)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 data1 = loadmat('InputData419.mat')
 

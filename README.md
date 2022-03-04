@@ -10,6 +10,26 @@
 
 ## Problems
 1. **agent creation**: troppo lenta... 300s circa
+
+#SCENARIO  DATA STRUCTURE
+      scenario: {
+               'complete_graph': DiGraph, #(grafo di tutta la rete)
+               'group_list': list, #(e.g. ['transp', 'dist_0'...]) list of all the sub group names
+               'dist_0':
+                        {
+                           'graph': DiGraph
+                           'Ix': np.matrix
+                           'NN': int
+                           'NB': int
+                           'L': array
+                           'D': array
+                           'D_ext': array
+                           'nodi_immissione': list
+                           'nodi_estrazione': list
+                           'edge_list': list
+                           'node_list': list
+                        }
+
 #GRAPH STRUCTURE
 The whole grid, composed of transport and distribution, is represented using a graph structure:
    

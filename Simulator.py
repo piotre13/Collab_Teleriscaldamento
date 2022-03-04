@@ -92,9 +92,9 @@ class Simulator(object):
         #then creating all the agents spawning to all sub containers
         #need to pass the DHGrid address for registering
         #todo when tested change the classes name removing test both in source and in create_agent methods
-        utenze = [x for x,y in self.scenario['graph'].nodes(data=True) if y['type']== 'Utenza']
-        substations = [x for x,y in self.scenario['graph'].nodes(data=True) if y['type']== 'BCT']
-        power_plants = [x for x,y in self.scenario['graph'].nodes(data=True) if y['type']== 'Gen']
+        utenze = [x for x,y in self.scenario['complete_graph'].nodes(data=True) if y['type']== 'Utenza']
+        substations = [x for x,y in self.scenario['complete_graph'].nodes(data=True) if y['type']== 'BCT']
+        power_plants = [x for x,y in self.scenario['complete_graph'].nodes(data=True) if y['type']== 'Gen']
         await self.create_Utenza(utenze)
         await self.create_BCT(substations)
         await self.create_Gen(power_plants)
@@ -106,7 +106,7 @@ class Simulator(object):
             # this will return a proxy object to aggr agent and its address
             # and trigger the create @classmethod in DistGrid_agent
             #node_attr = nx.get_node_attributes(self.scenario, agent)
-            node_attr = self.scenario['graph'].nodes[agent]
+            node_attr = self.scenario['complete_graph'].nodes[agent]
             sub_addr = [(y, x[1]) for y, x in self.substations.items()]
             proxy, address = await container.spawn(
                 'mas.Gen_plant:GenerationPlant_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size, sub_addr)
@@ -120,7 +120,7 @@ class Simulator(object):
             # this will return a proxy object to aggr agent and its address
             # and trigger the create @classmethod in DistGrid_agent
             #node_attr = nx.get_node_attributes(self.scenario, agent)
-            node_attr = self.scenario['graph'].nodes[agent]
+            node_attr = self.scenario['complete_graph'].nodes[agent]
             group = node_attr['group'].split('-')[1]
             ut_addr = [(y,x[1]) for y, x in self.utenze.items() if group in y ]
             proxy, address = await container.spawn(
@@ -135,7 +135,7 @@ class Simulator(object):
             # this will return a proxy object to aggr agent and its address
             # and trigger the create @classmethod in DistGrid_agent
             #node_attr = nx.get_node_attributes(self.scenario, agent) # todo this does not work because teh attributes are not added to the graph but only to nodes
-            node_attr = self.scenario['graph'].nodes[agent]
+            node_attr = self.scenario['complete_graph'].nodes[agent]
             proxy, address = await container.spawn(
                 'mas.Utenza:Utenza_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size )
             self.utenze[agent] = (proxy, address)
@@ -214,17 +214,18 @@ class Simulator(object):
 
         # *********** FINALIZE condition #when outside the loop
         #TODO make a good report and final check if its working
-        #todo call reporting() meth from transp grid whcih recalls all methods reporting() from dist grids and so on
         #encapsulated hierarchical reports
-        futs = [grid[0].reporting() for grid in self.transp_grids]
-        reports_grids = await asyncio.gather(*futs)
-        for res in reports_grids:
-            self.report[res[0]] = res[1]
 
+        transp_reports = await self.DHgrid[0].report()
+        futs = [sub[0].report() for sub_n, sub in self.substations.items()]
+        subs_reports = await asyncio.gather(*futs)
+
+        self.report[transp_reports[0]] = transp_reports[1]
+        for res in subs_reports:
+            self.report[res[0]] = res[1]
         self.save_reports(self.report)
 
-        #self.report((reports_grids))
-        #this data is a list for each dist grid with dict cpontaining info of substations and utenze
+
         await self.finalize()
         return (print('simul SUCCESSFULLY ended!'))
         # **********************************
@@ -233,7 +234,7 @@ class Simulator(object):
     def save_reports(self, reports):
         '''reports is a list for each grid created that contains all reporting data...
         this function saves the pickle to be used for analysis'''
-        with open('Plot&analysis/Final_reports.pickle', 'wb') as handle:
+        with open('Plots&analysis/Final_reports.pickle', 'wb') as handle:
             pickle.dump(reports, handle, protocol=pickle.HIGHEST_PROTOCOL)
         handle.close()
 

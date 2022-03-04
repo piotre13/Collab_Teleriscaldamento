@@ -62,13 +62,13 @@ class Utenza_test(aiomas.Agent):
         self.G = self.G_inputs[ts]
         self.P = self.P_inputs[ts]
         self.T_out = self.calc_T()
-        print('dummy step performed')
 
     def calc_T(self):
         try:
             T = self.T_in - (self.P / self.G / self.config['properties']['cpw'])
-        except ZeroDivisionError:
+        except (ZeroDivisionError, RuntimeWarning) as e:
             print ('Utenza :%s is switched OFF')
+            print(e)
             T = self.T_in
         return T
 

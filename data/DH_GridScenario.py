@@ -27,8 +27,8 @@ class GridScenario(object):
         self.Sto_conf = self.config['Storages']
         self.Gen_conf = self.config['Generators']
         self.scenario = {}
-        self.scenario['graph'] = None
-        self.scenario['groups'] = []
+        self.scenario['complete_graph'] = None
+        self.scenario['group_list'] = []
 
     def run(self):
         ''' main function of the class '''
@@ -52,7 +52,8 @@ class GridScenario(object):
 
         # updating nodes attributes for the transport grid
         #HERE WHERE TO ADD ATTRIBUTE KEYS
-        self.scenario['groups'].append('transp')
+        self.scenario['group_list'].append('transp')
+        self.scenario['transp']={}
         for node in self.graph.nodes:
             self.graph.nodes[node]['group'] = 'transp'
             self.graph.nodes[node]['storages']=[]
@@ -74,9 +75,8 @@ class GridScenario(object):
         for node in  self.graph.nodes():
             mapping[node] = 'transp_' + str(node)  # creating the mapping for relabelling
         self.graph = nx.relabel_nodes(self.graph, mapping)
-        self.scenario['transp'] = self.graph
+        self.scenario['transp']['graph'] = self.graph
 
-        #ADDING DISTRIBUTION GRIDS
         self.add_distribution(sample_graph)
 
         # ADDING COMPONENTS
@@ -88,6 +88,24 @@ class GridScenario(object):
 
         # adding storages
         self.add_Storages()
+
+        for group in self.scenario['group_list']:
+            Ix, nn, nb, node_list, edge_list = self.get_incidence_matrix(self.scenario[group]['graph'])
+            self.scenario[group]['Ix'] = Ix
+            self.scenario[group]['NN'] = nn
+            self.scenario[group]['NB'] = nb
+            self.scenario[group]['node_list'] = node_list
+            self.scenario[group]['edge_list'] = edge_list
+            D_ext, L, D = self.get_line_params(edge_list, self.config['properties']['branches']['D_ext']['c1'],
+                                               self.config['properties']['branches']['D_ext']['c2'])
+            self.scenario[group]['D'] = D
+            self.scenario[group]['L'] = L
+            self.scenario[group]['D_ext'] = D_ext
+            nodi_immissione, nodi_estrazione = self.get_imm_ext(self.scenario[group]['graph'], group)
+            self.scenario[group]['nodi_immissione'] = nodi_immissione
+            self.scenario[group]['nodi_estrazione'] = nodi_estrazione
+            # ADDING DISTRIBUTION GRIDS
+
 
         #visualizing
         self.show_graph()
@@ -140,7 +158,8 @@ class GridScenario(object):
         # adding the distribution distgrids to the whole graph
         for n in self.Dist_conf['Grids']:
             prefix = 'dist_%s' % n
-            self.scenario['groups'].append(prefix)
+            self.scenario['group_list'].append(prefix)
+            self.scenario[prefix]={}
             mapping = {}
             for node in sample_graph.nodes:
                 mapping[node] = prefix+ '_' + str(node)  # creating the mapping for relabelling
@@ -151,7 +170,22 @@ class GridScenario(object):
                 dist_graph.nodes[node]['storages'] = []
 
             nx.set_edge_attributes(dist_graph,prefix,'group')
-            self.scenario[prefix] = dist_graph
+            self.scenario[prefix]['graph'] = dist_graph
+            # Ix, nn, nb, node_list, edge_list = self.get_incidence_matrix(dist_graph)
+            # self.scenario[prefix]['Ix'] = Ix
+            # self.scenario[prefix]['NN'] = nn
+            # self.scenario[prefix]['NB'] = nb
+            # self.scenario[prefix]['node_list'] = node_list
+            # self.scenario[prefix]['edge_list'] = edge_list
+            # D_ext, L, D = self.get_line_params(edge_list, self.config['properties']['branches']['D_ext']['c1'],
+            #                                    self.config['properties']['branches']['D_ext']['c2'])
+            # self.scenario[prefix]['D'] = D
+            # self.scenario[prefix]['L'] = L
+            # self.scenario[prefix]['D_ext'] = D_ext
+            # nodi_immissione, nodi_estrazione = self.get_imm_ext(dist_graph, prefix)
+            # self.scenario[prefix]['nodi_immissione'] = nodi_immissione
+            # self.scenario[prefix]['nodi_estrazione'] = nodi_estrazione
+
 
             dist_graph = self.connecting_BCT(n, dist_graph)
             #dist_graph.graph['type'] = 'distribution'
@@ -170,9 +204,11 @@ class GridScenario(object):
         mapping = {}
         for BCT, con in zip(BCT_nodes, connections):
             if con in free_nodes:
+                self.scenario['transp']['graph'].nodes[con]['type']='BCT'
                 mapping[BCT] = con
                 mix_group = 'transp-'+dist_graph.nodes[BCT]['group']
                 dist_graph.nodes[BCT]['group'] = mix_group
+                dist_graph.nodes[BCT]['origin_id'] = int(BCT.split('_')[-1])
                 #nx.relabel_nodes(dist_graph,{BCT:con})
                 # self.graph.nodes[BCT]['connection'] = connection
                 # self.graph.nodes[con]['connection'] = BCT
@@ -189,6 +225,7 @@ class GridScenario(object):
         for g_n, node in self.Gen_conf.items():
             if self.graph.nodes[node]['type'] == 'BCT' and self.graph.nodes[node]['group'] == 'transp' :
                 self.graph.nodes[node]['type'] = 'Gen'
+                self.scenario['transp']['graph'].nodes[node]['type']= 'Gen'
             else:
                 raise ValueError(' The specified connections for generator %s are wrong' % g_n)
                 # TODO  possible random assignment when config connections are wrong
@@ -201,9 +238,13 @@ class GridScenario(object):
         for s_n, node in self.Sto_conf.items():
             if self.graph.nodes[node]['type'] == 'free' or self.graph.nodes[node]['type'] == 'inner' :
                 self.graph.nodes[node]['type'] = 'Storage'
+                group = self.graph.nodes[node]['group']
+                self.scenario[group]['graph'].nodes[node]['type']='Storage'
             else:
                 name = str(node) +'_'+self.graph.nodes[node]['type']+ '_' +str(len(self.graph.nodes[node]['storages'])+1)
                 self.graph.nodes[node]['storages'].append(name)
+                group = self.graph.nodes[node]['group']
+                self.scenario[group]['graph'].nodes[node]['storages'].append(name)
 
 
 
@@ -255,9 +296,48 @@ class GridScenario(object):
         #e.g connection etc
         pass
 
+    def get_incidence_matrix(self,graph):
+        # ok
+        node_list = sorted(list(graph.nodes), key=lambda t: int(t.split('_')[-1]))
+        edge_list = sorted(list(graph.edges(data=True)), key=lambda t: t[2].get('NB', 1))
+        NN = len(node_list)
+        NB = len(edge_list)
+        graph_matrix = nx.incidence_matrix(graph, nodelist=node_list, edgelist=edge_list,
+                                           oriented=True).todense().astype(int)
+        graph_matrix = np.array(graph_matrix)
+        return graph_matrix, NN, NB, node_list, edge_list
+
+    def get_line_params(self, edge_list, c1, c2):
+        # ok
+        L = [l[2]['lenght'] for l in edge_list]
+        D = [d[2]['D'] for d in edge_list]
+        D_ext = []
+        for d in D:
+            d_e = d * c1 + 2 * c2
+            D_ext.append(d_e)
+        return D_ext, L, D
+
+    def get_imm_ext(self, graph, group):
+        #immisisone estrazione per mandata si rivoltano per ritorno
+        if group == 'transp':
+            n = [int(x.split('_')[-1]) for x, attr in graph.nodes(data=True) if attr['type']=='Gen']
+            n_s = [int(x.split('_')[-1]) for x, attr in graph.nodes(data=True) if attr['type']=='Storage']
+            nodi_immissione = n + n_s
+            n = [int(x.split('_')[-1]) for x, attr in graph.nodes(data=True) if attr['type']=='BCT']
+            nodi_estrazione = n + n_s
+
+        else:
+            n = [int(x.split('_')[-1]) for x, attr in graph.nodes(data=True) if attr['type'] == 'BCT']
+            n_s = [int(x.split('_')[-1]) for x, attr in graph.nodes(data=True) if attr['type'] == 'Storage']
+            nodi_immissione = n + n_s
+            n = [int(x.split('_')[-1]) for x, attr in graph.nodes(data=True) if attr['type'] == 'Utenza']
+            nodi_estrazione = n + n_s
+
+        return nodi_immissione, nodi_estrazione
+
     def save_object(self):
 
-        self.scenario['graph'] = self.graph
+        self.scenario['complete_graph'] = self.graph
        #nected_components(self.graph))
         # for set in nodes_sets:
         #     if type(list(set)[0]) == int:
