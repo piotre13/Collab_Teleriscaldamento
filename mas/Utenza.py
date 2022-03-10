@@ -35,10 +35,7 @@ class Utenza_test(aiomas.Agent):
         self.P = None
 
         #history records
-
-
-
-
+        self.P_hist = []
 
     @classmethod
     async def create(cls, container,  name, node_attr, DHGrid_addr, config, ts_size):
@@ -51,24 +48,30 @@ class Utenza_test(aiomas.Agent):
 
         return utenza
 
-
-
     @aiomas.expose
     async def step(self):
 
         ts = int(self.container.clock.time() / self.ts_size) # TIMESTEP OF THE SIMULATION
         if ts == 0:
             self.T_in = self.config['properties']['init']['T_utenza_in']
+        #update T_in
         self.G = self.G_inputs[ts]
-        self.P = self.P_inputs[ts]
+        self.P = round(self.P_inputs[ts], 5)
+        self.P_hist.append(self.P)
+
+    @aiomas.expose
+    async def calculation(self):
         self.T_out = self.calc_T()
 
     def calc_T(self):
-        try:
-            T = self.T_in - (self.P / self.G / self.config['properties']['cpw'])
-        except (ZeroDivisionError, RuntimeWarning) as e:
-            print ('Utenza :%s is switched OFF')
-            print(e)
+        if self.P != 0.0 or self.G != 0.0:
+            try:
+                T = self.T_in - (self.P / self.G / self.config['properties']['cpw'])
+            except (ZeroDivisionError) as e:
+                print ('Utenza :%s is switched OFF')
+                print(e)
+                T = self.T_in
+        else:
             T = self.T_in
         return T
 
@@ -84,9 +87,11 @@ class Utenza_test(aiomas.Agent):
         return (self.name, self.G)
 
     @aiomas.expose
-    async def set_T(self):
-        T = None
-        return (self.name, T)
+    async def set_T(self, T, dir):
+        if dir == 'mandata':
+            self.T_in = T
+        else:
+            self.T_out = T
 
     @aiomas.expose
     async def set_G(self):

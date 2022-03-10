@@ -11,6 +11,37 @@ import scipy.sparse as sp
 from scipy.sparse import linalg as lng
 
 
+
+def imm_extr_nodes (G_coll, dir, sto_state):
+    immissione = []
+    estrazione = []
+    if dir == 'mandata':
+        for gen in G_coll[0]:
+            id = int(gen[0].split('_')[-1])
+            immissione.append(id)
+        for sub in G_coll[1]:
+            id = int(sub[0].split('_')[-1])
+            estrazione.append(id)
+        for el in sto_state:
+            id = int(el[0].split('_')[-1])
+            if el[1]=='discharging':
+                immissione.append(id)
+    elif dir == 'ritorno':
+        for gen in G_coll[0]:
+            id = int(gen[0].split('_')[-1])
+            estrazione.append(id)
+        for sub in G_coll[1]:
+            id = int(sub[0].split('_')[-1])
+            immissione.append(id)
+        for el in sto_state:
+            id = int(el[0].split('_')[-1])
+            if el[1]=='charging':
+                estrazione.append(id)
+    return immissione, estrazione
+
+
+
+
 def create_matrices(graph, G, G_ext, T, dir, param, immissione, estrazione, ts_size): # TODO generalize
     ''' la T sta per T immissione e può essere o quella delle utenze o quella delle BCT
     in entrambi i casi è una lista di tuple (id,T)'''

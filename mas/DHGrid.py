@@ -9,7 +9,7 @@ Matrix calculation smust be parallelized by dividing them in portions that are c
 import aiomas
 import asyncio
 from Utils import *
-from models.DHGrid_model import create_matrices, eq_continuità, create_Gvect, calc_temperatures
+from models.DHGrid_model import create_matrices, eq_continuità, create_Gvect, calc_temperatures, imm_extr_nodes
 
 
 class DHGrid(aiomas.Agent):
@@ -30,6 +30,7 @@ class DHGrid(aiomas.Agent):
         self.substations = {}
         self.power_plants = {}
         self.utenze = {}
+        self.storages = {}
 
 
         #qui storo i vettori delle G
@@ -68,6 +69,11 @@ class DHGrid(aiomas.Agent):
             self.utenze[agent_name] = (proxy, agent_addr,group)
             #print('registered Utenza: %s at the main agent: %s' % (agent_name, self.name))
 
+        if agent_type == 'STO':
+            proxy = await self.container.connect(agent_addr, timeout=10)
+            self.storages[agent_name] = (proxy, agent_addr, group)
+            # print('registered Utenza: %s at the main agent: %s' % (agent_name, self.name))
+
     @aiomas.expose
     async def step (self):
         #SIMULATION TIME
@@ -84,6 +90,8 @@ class DHGrid(aiomas.Agent):
         futs = [sub[0].step() for sub_n, sub in self.substations.items()]
         await asyncio.gather(*futs) # 2 sottostazioni
         #probably need to add storgaes
+        futs = [sto[0].step() for sto_n, sto in self.storages.items() if 'transp' in sto_n ]
+        await asyncio.gather(*futs)
         futs = [gen[0].step() for gen_n, gen in self.power_plants.items()]
         await asyncio.gather(*futs) # 3 power plants
 
@@ -93,11 +101,16 @@ class DHGrid(aiomas.Agent):
         T_coll = await self.gathering_T('mandata')
 
         #1. calc mandata transport
-        T, param, immissione, estrazione, G, G_ext = self.prepare_inputs(T_coll, G_coll, 'mandata')
+        futs = [sto[0].get_state() for sto_n, sto in self.storages.items() ]
+        sto_states = await asyncio.gather(*futs)
+        T, param, immissione, estrazione, G, G_ext = self.prepare_inputs(T_coll, G_coll, 'mandata', sto_states)
         M, K, f = create_matrices(self.transp_data['graph'], G, G_ext, T,
                         'mandata', param, immissione, estrazione, self.ts_size)
         T_res = calc_temperatures(M, K, f, self.T['mandata'][-1])
         self.T['mandata'].append(T_res)
+        #set storages temperatures
+        futs = [sto[0].set_T(self.T['mandata'][-1][int(sto_n.split('_')[-1])], 'mandata') for sto_n, sto in self.storages.items()]
+        await asyncio.gather(*futs)
 
         #2. calc mandata  and ritorno distributions (parallel execution)
         futs = [sub[0].calculate(self.T['mandata'][-1][int(sub_n.split('_')[-1])]) for sub_n, sub in self.substations.items()]
@@ -105,8 +118,9 @@ class DHGrid(aiomas.Agent):
 
         #4. calc ritorno transport
         T_coll = await self.gathering_T('ritorno')
-        T, param, immissione, estrazione, G, G_ext = self.prepare_inputs(T_coll, G_coll, 'ritorno')
-
+        futs = [sto[0].get_state() for sto_n, sto in self.storages.items()]
+        sto_states = await asyncio.gather(*futs)
+        T, param, immissione, estrazione, G, G_ext = self.prepare_inputs(T_coll, G_coll, 'ritorno', sto_states)
         M, K, f = create_matrices(self.transp_data['graph'], G, G_ext, T,
                               'ritorno', param, immissione, estrazione, self.ts_size)
         T_res = calc_temperatures(M, K, f, self.T['ritorno'][-1])
@@ -114,22 +128,18 @@ class DHGrid(aiomas.Agent):
         #need to set the return T for generators
         futs = [gen[0].set_T(T_res[4],'ritorno') for gen_n, gen in self.power_plants.items()]
         await asyncio.gather(*futs)
-
+        #set storages temperatures
+        futs = [sto[0].set_T(self.T['ritorno'][-1][int(sto_n.split('_')[-1])], 'ritorno') for sto_n, sto in
+                self.storages.items()]
+        await asyncio.gather(*futs)
 
     def initialize(self):
         T1 = np.ones(self.transp_data['NN'])*self.config['properties']['init']['T_utenza_in']
         T2 = np.ones(self.transp_data['NN'])*self.config['properties']['init']['T_in_ritorno']
-        # for gen in self.power_plants:
-        #     id = int(gen.split('_')[-1])
-        #     T1[id] = self.config['properties']['init']['T_gen']
-        #     #T2[id] = self.config['properties']['init']['T_gen_ret']
-        # for sub in self.substations:
-        #     id = int(sub.split('_')[-1])
-        #     #T1[id] = self.config['properties']['init']['TBC']
-        #     T2[id] = self.config['properties']['init']['T_BCT_ret']
         return T1, T2
 
-    def prepare_inputs(self, T_coll, G_coll, dir):
+    def prepare_inputs(self, T_coll, G_coll, dir, sto_state):
+
         T = np.ones(self.transp_data['NN'])
 
         param = {}
@@ -151,11 +161,14 @@ class DHGrid(aiomas.Agent):
             for el in T_coll[0]:#generators
                 id = int(el[0].split('_')[-1])
                 T[id] = el[1]
-                #todo _add possibility of storages T_in
+            for el in T_coll[1]:  #storages
+                if el[1]:
+                    id = int(el[0].split('_')[-1])
+                    T[id] = el[1]
+
 
             #todo check if in scenario creation we count possible storages as immision or extraction
-            immissione = self.transp_data['nodi_immissione']
-            estrazione = self.transp_data['nodi_estrazione']
+            immissione, estrazione = imm_extr_nodes(G_coll, dir, sto_state )
             G_ext = create_Gvect(G_coll, 'transp', self.transp_data['NN'])
             G = eq_continuità(self.transp_data['Ix'], G_ext)
             self.G['mandata'].append(G)
@@ -170,8 +183,7 @@ class DHGrid(aiomas.Agent):
             #     id = int(el[0].split('_')[-1])
             #     T[id] = el[1]
 
-            immissione = self.transp_data['nodi_estrazione'] # sono ribaltati giusto!
-            estrazione = self.transp_data['nodi_immissione']
+            immissione, estrazione = imm_extr_nodes(G_coll, dir, sto_state )
             G_ext = self.G_ext * -1
             G = self.G_t
             self.G['ritorno'].append(G)
@@ -182,9 +194,11 @@ class DHGrid(aiomas.Agent):
     async def gathering_G(self):
         G = []
         futs = [gen[0].get_G() for gen_n, gen in self.power_plants.items()]
-        G.append(await asyncio.gather(*futs))
+        G.append(await asyncio.gather(*futs)) # generators
         futs = [sub[0].get_G() for sub_n, sub in self.substations.items()]
         G.append(await asyncio.gather(*futs))#sottostazioni
+        futs = [sto[0].get_G() for sto_n, sto in self.storages.items()]
+        G.append(await asyncio.gather(*futs)) # storages
         return G
 
     async def gathering_T(self, direction):
@@ -192,11 +206,15 @@ class DHGrid(aiomas.Agent):
         if direction == 'mandata':
             #gathering T in mandata need only the inlet temperature for the substations we use the calculated tempertaures
             futs = [gen[0].get_T(direction) for gen_n, gen in self.power_plants.items()]
-            T.append(await asyncio.gather(*futs))
+            T.append(await asyncio.gather(*futs)) # power plants
+            futs = [sto[0].get_T(direction) for sto_n, sto in self.storages.items()]
+            T.append(await asyncio.gather(*futs)) # indipendent storages
 
         elif direction == 'ritorno':
             futs = [sub[0].get_T(direction) for sub_n, sub in self.substations.items()]
             T.append(await asyncio.gather(*futs))  # sottostazioni
+            futs = [sto[0].get_T(direction) for sto_n, sto in self.storages.items()]
+            T.append(await asyncio.gather(*futs)) # independent storages
 
         return T
 

@@ -23,6 +23,7 @@ try:
     t_creation = time.time() - t0
     print('creation time: %s' % t_creation)
     ts0 = time.time()
+
     aiomas.run(until=Sim.run())
     ts1 = time.time()
     print('simulation time: %s' %(ts1-ts0))

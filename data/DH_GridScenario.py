@@ -9,6 +9,7 @@ import networkx as nx
 from pyvis.network import Network
 import pickle
 from Utils import read_config
+import matplotlib.pyplot as plt
 import time
 
 
@@ -108,7 +109,7 @@ class GridScenario(object):
 
 
         #visualizing
-        self.show_graph()
+        #self.show_graph()
 
 
     def incidence2graph(self, mat_data):
@@ -241,12 +242,10 @@ class GridScenario(object):
                 group = self.graph.nodes[node]['group']
                 self.scenario[group]['graph'].nodes[node]['type']='Storage'
             else:
-                name = str(node) +'_'+self.graph.nodes[node]['type']+ '_' +str(len(self.graph.nodes[node]['storages'])+1)
+                name = str(node) +'_'+ self.graph.nodes[node]['type']+ '_' +str(s_n)
                 self.graph.nodes[node]['storages'].append(name)
                 group = self.graph.nodes[node]['group']
-                self.scenario[group]['graph'].nodes[node]['storages'].append(name)
-
-
+                #self.scenario[group]['graph'].nodes[node]['storages'].append(name)
 
 
 
@@ -352,6 +351,17 @@ class GridScenario(object):
         with open(self.name, 'wb') as handle:
             pickle.dump(self.scenario, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+    def plot_network(self):
+
+        node_colors = ['red' if node_attr['type']== 'Gen' else 'blue' for node, node_attr in self.graph.nodes(data=True) ]
+        #pos = nx.spring_layout(self.graph)
+        pos = nx.kamada_kawai_layout(self.graph)
+        nx.draw_networkx_nodes(self.graph, pos, cmap=plt.get_cmap('jet'),
+                               node_color=node_colors, node_size=10)
+        nx.draw_networkx_labels(self.graph, pos)
+        nx.draw_networkx_edges(self.graph, pos, edgelist=self.graph.edges(), edge_color='r', arrows=True)
+        plt.show()
+
 
 if __name__ == '__main__':
 
@@ -360,4 +370,5 @@ if __name__ == '__main__':
 
     GridManager = GridScenario(scenario_name)
     DH_net = GridManager.run()
+    GridManager.plot_network()
     GridManager.save_object()

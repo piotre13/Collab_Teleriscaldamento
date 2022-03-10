@@ -7,7 +7,7 @@ from models.DHGrid_model import create_matrices, eq_continuità, create_Gvect, c
 #TODO GENERALIZE ALL THE [4] WITH THE INDEX OF THE BCT INSIDE THE DIST GRID
 '''Appending to history is only done in calc or set functions'''
 class Sottostazione_test(aiomas.Agent):
-    def __init__(self, container, name, node_attr, config, ts_size, DHGrid, ut_proxy):
+    def __init__(self, container, name, node_attr, config, ts_size, DHGrid, ut_proxy, sto_proxy):
         super().__init__(container)
 
         #basic info
@@ -22,6 +22,7 @@ class Sottostazione_test(aiomas.Agent):
         #connections
         self.Grid_proxy = DHGrid
         self.utenze_proxy = ut_proxy
+        self.storages_proxy = sto_proxy
 
         # sample data
         self.Usernode = read_mat_data(self.config['paths']['net_data'])['UserNode']
@@ -40,7 +41,7 @@ class Sottostazione_test(aiomas.Agent):
 
 
     @classmethod
-    async def create(cls, container,  name, node_attr, DHGrid_addr, config, ts_size, ut_addresses):
+    async def create(cls, container,  name, node_attr, DHGrid_addr, config, ts_size, ut_addresses, sto_addresses):
         #NB this accrocco does not allow to use on different machines should be avoided creating a proper serializer for grphs
 
         DHGrid = await container.connect(DHGrid_addr)
@@ -49,7 +50,11 @@ class Sottostazione_test(aiomas.Agent):
         for ut in ut_addresses:
              ut_proxy[ut[0]] = await container.connect(ut[1])
 
-        sottostazione = cls(container,name, node_attr, config, ts_size, DHGrid, ut_proxy)
+        sto_proxy = {}
+        for sto in sto_addresses:
+            sto_proxy[sto[0]] = await container.connect(sto[1])
+
+        sottostazione = cls(container,name, node_attr, config, ts_size, DHGrid, ut_proxy, sto_proxy)
         print('Created Sottostazione Agent: %s'%name)
 
         #registering
@@ -80,6 +85,13 @@ class Sottostazione_test(aiomas.Agent):
                                   'mandata', param, immissione, estrazione, self.ts_size)
         T_res = calc_temperatures(M, K, f, self.T_grid_mandata[-1])
         self.T_grid_mandata.append(T_res)
+
+        #update temperatures at utenze #  todo and update at storages
+        futs = [utenza.set_T(self.T_grid_mandata[-1][int(ut_n.split('_')[-1])], 'mandata') for ut_n, utenza in self.utenze_proxy.items()]
+        await asyncio.gather(*futs)
+        #make utenze calculate T_ret
+        futs = [utenza.calculation() for ut_n, utenza in self.utenze_proxy.items()]
+        await asyncio.gather(*futs)
 
         #ritorno
         T_coll = await self.gather_T('ritorno')
@@ -150,6 +162,9 @@ class Sottostazione_test(aiomas.Agent):
         futs = [utenza.get_G() for ut_n, utenza in self.utenze_proxy.items()]
         G_utenze = await asyncio.gather(*futs)  # 1 utenze
         G.append(G_utenze)
+        futs = [storage.get_G() for sto_n, storage in self.storages_proxy.items()]
+        G_storage = await asyncio.gather(*futs)
+        G.append(G_storage)
         return G
 
     async def gather_T(self, dir):

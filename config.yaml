@@ -33,21 +33,22 @@ ScenarioCreation:
 
   Storages:     # key:value pairs for storages with the node id of the position (could be any node of the whole system)
     #NB se voglio mettere storages nelle BCT devo usare i nomi che avranno nella grid finale quindi gli stessi delle connessioni li sopra
-    0: 'transp_4'
-    1: 'transp_4'
-    2: 'transp_4'
+    #per ora solo su rete di trasporto
+    0: 'transp_8'
+    1: 'transp_5'
+    2: 'transp_2'
 
 
   sto_schedule:
-    0:
-      charge: !!python/tuple ['0am','4am']
-      discharge: !!python/tuple ['5am','7am']
-    1:
-      charge: !!python/tuple [ '0am','4am' ]
-      discharge: !!python/tuple [ '5am','7am' ]
-    2:
-      charge: !!python/tuple [ '0am','4am' ]
-      discharge: !!python/tuple [ '5am','7am' ]
+    transp_8:
+      charge: !!python/tuple [0,4]
+      discharge: !!python/tuple [5,7]
+    transp_5:
+      charge: !!python/tuple [0,4]
+      discharge: !!python/tuple [5,7]
+    transp_2:
+      charge: !!python/tuple [0,4]
+      discharge: !!python/tuple [5,7]
 
   properties:
     cpw: 4186
@@ -101,8 +102,8 @@ properties:
     T_init_transp : 400.1500
 
 #simulation
-START: '2013-05-11T21:23:58.970460+07:00' #utc format or arrow getable format
-END: '2013-05-11T21:23:58.970460+07:00' #utc format or arrow getable format
+START: '2013-05-11T12:00:00.970460' #utc format or arrow getable format
+END: '2013-05-11T21:23:58.970460' #utc format or arrow getable format
 TS_SIZE: 60    #in seconds 300
 DURATION: 2156 #2156  # 432 in number of timesteps
 

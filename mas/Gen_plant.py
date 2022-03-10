@@ -2,11 +2,12 @@ import aiomas
 import asyncio
 import time
 import pickle
+import datetime
 
 
 '''Appending to history is only done in calc or set functions'''
 class GenerationPlant_test(aiomas.Agent):
-    def __init__(self, container, name, node_attr, config, ts_size, DHGrid, sub_proxy):
+    def __init__(self, container, name, node_attr, config, ts_size, DHGrid, sub_proxy, sto_proxy):
         super().__init__(container)
         # basic info
         self.name = name
@@ -17,8 +18,12 @@ class GenerationPlant_test(aiomas.Agent):
         # connections
         self.Grid_proxy = DHGrid
         self.substations_proxy = sub_proxy
+        self.storages_proxy = sto_proxy
 
         # state variables
+        self.storages = None
+        if len(node_attr['storages'])>0:
+            self.storages = node_attr['storages']
         self.T_in = None
         self.T_out = None
         self.G = None
@@ -29,13 +34,17 @@ class GenerationPlant_test(aiomas.Agent):
 
 
     @classmethod
-    async def create(cls, container,  name, node_attr, DHGrid_addr, config, ts_size, sub_addresses):
+    async def create(cls, container,  name, node_attr, DHGrid_addr, config, ts_size, sub_addresses, sto_addresses):
 
         DHGrid = await container.connect(DHGrid_addr)
         sub_proxy = {}
         for sub in sub_addresses:
             sub_proxy[sub[0]] = await container.connect(sub[1])
-        centrale = cls(container,name, node_attr, config, ts_size, DHGrid, sub_proxy)
+        sto_proxy = {}
+        for sto in sto_addresses:
+            sto_proxy[sto[0]] = await container.connect(sto[1])
+
+        centrale = cls(container,name, node_attr, config, ts_size, DHGrid, sub_proxy, sto_proxy)
         print('Created Generation Plant Agent: %s'%name)
 
         #registering
@@ -47,6 +56,8 @@ class GenerationPlant_test(aiomas.Agent):
         ts = int(self.container.clock.time() / self.ts_size)  # TIMESTEP OF THE SIMULATION
         self.T_out = self.config['properties']['init']['T_gen'] # impongo la temperatura di centrale sempre!
         self.G = await self.gather_G()
+        #if self.storages:
+        #    self.storages_controller(ts)
 
     @aiomas.expose
     async def calc_P(self):
@@ -56,8 +67,12 @@ class GenerationPlant_test(aiomas.Agent):
     async def gather_G(self):
         futs = [sub.get_G() for sub_n, sub in self.substations_proxy.items()]
         G_subs = await asyncio.gather(*futs)  # 1 substations
-        G = sum([x[1] for x in G_subs])  # simply summing all the flows from utenze
+         # simply summing all the flows from utenze
         # todo check the flows are all positive they should be
+        futs = [sto.get_G() for sto_n, sto in self.storages_proxy.items()]
+        G_sto = await asyncio.gather(*futs)
+        G = sum([x[1] for x in G_subs]) + sum([y[1] for y in G_sto])
+
         return G
 
     @aiomas.expose
@@ -83,8 +98,31 @@ class GenerationPlant_test(aiomas.Agent):
         T = None
         return (self.name, T)
 
+
+    def storages_controller(self, ts):
+        utc_start = self.container.clock._utc_start.datetime
+        second_past = datetime.timedelta(0, self.ts_size*ts)
+        datetime_now = utc_start + second_past
+        n_sto = len(self.storages)
+
+        #todo will use the config for schedule and
+        if self.time_in_range(datetime.time(0, 0, 0),datetime.time(4, 0, 0), datetime_now.time()):
+            self.G = self.G - (30 * n_sto)
+            return
+        elif self.time_in_range(datetime.time(5, 0, 0),datetime.time(7, 0, 0), datetime_now.time()):
+            self.G = self.G + (60 * n_sto)
+            return
+        else:
+            return
+
+    def time_in_range(self, start, end, x):
+        """Return true if x is in the range [start, end]"""
+        if start <= end:
+            return start <= x <= end
+        else:
+            return start <= x or x <= end
 #
-#
+
 # class GenerationPlant(aiomas.Agent):
 #     def __init__(self, container, name, sid, node_attr, properties, ts_size, transp):
 #         super().__init__(container)

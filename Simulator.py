@@ -43,7 +43,7 @@ class Simulator(object):
         self.power_plants = {} #dict {name : (proxy, addr),}
         self.utenze = {} #dict {name : (proxy, addr),}
         self.substations = {} #dict {name : (proxy, addr),}
-
+        self.storages = {}
         # containers proxy
         self.main_container = None
         self.sub_containers = None
@@ -95,8 +95,10 @@ class Simulator(object):
         utenze = [x for x,y in self.scenario['complete_graph'].nodes(data=True) if y['type']== 'Utenza']
         substations = [x for x,y in self.scenario['complete_graph'].nodes(data=True) if y['type']== 'BCT']
         power_plants = [x for x,y in self.scenario['complete_graph'].nodes(data=True) if y['type']== 'Gen']
+        storages = [x for x,y in self.scenario['complete_graph'].nodes(data=True) if y['type']== 'Storage']
         await self.create_Utenza(utenze)
         await self.create_BCT(substations)
+        await self.create_Storage(storages)
         await self.create_Gen(power_plants)
 
     async def create_Gen(self, power_plants):
@@ -107,9 +109,11 @@ class Simulator(object):
             # and trigger the create @classmethod in DistGrid_agent
             #node_attr = nx.get_node_attributes(self.scenario, agent)
             node_attr = self.scenario['complete_graph'].nodes[agent]
+            group = node_attr['group']
+            sto_addr = [(y, x[1]) for y, x in self.storages.items() if group in y]
             sub_addr = [(y, x[1]) for y, x in self.substations.items()]
             proxy, address = await container.spawn(
-                'mas.Gen_plant:GenerationPlant_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size, sub_addr)
+                'mas.Gen_plant:GenerationPlant_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size, sub_addr, sto_addr)
             self.power_plants[agent] = (proxy,address)
             num += 1
 
@@ -122,9 +126,10 @@ class Simulator(object):
             #node_attr = nx.get_node_attributes(self.scenario, agent)
             node_attr = self.scenario['complete_graph'].nodes[agent]
             group = node_attr['group'].split('-')[1]
+            sto_addr = [(y, x[1]) for y, x in self.storages.items() if group in y]
             ut_addr = [(y,x[1]) for y, x in self.utenze.items() if group in y ]
             proxy, address = await container.spawn(
-                'mas.Sottostazione:Sottostazione_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size, ut_addr )
+                'mas.Sottostazione:Sottostazione_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size, ut_addr, sto_addr)
             self.substations[agent] = (proxy, address)
             num += 1
 
@@ -139,6 +144,19 @@ class Simulator(object):
             proxy, address = await container.spawn(
                 'mas.Utenza:Utenza_test.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size )
             self.utenze[agent] = (proxy, address)
+            num += 1
+
+    async def create_Storage(self, storages):
+        num = 0
+        for agent in storages:
+            container = self.sub_containers[num % len(self.sub_containers)][1]
+            # this will return a proxy object to aggr agent and its address
+            # and trigger the create @classmethod in DistGrid_agent
+            # node_attr = nx.get_node_attributes(self.scenario, agent) # todo this does not work because teh attributes are not added to the graph but only to nodes
+            node_attr = self.scenario['complete_graph'].nodes[agent]
+            proxy, address = await container.spawn(
+                'mas.Storage:Storage.create', agent, node_attr, self.DHgrid[1], self.config, self.ts_size)
+            self.storages[agent] = (proxy, address)
             num += 1
 
     async def start_sub_containers(self):
@@ -234,7 +252,7 @@ class Simulator(object):
     def save_reports(self, reports):
         '''reports is a list for each grid created that contains all reporting data...
         this function saves the pickle to be used for analysis'''
-        with open('Plots&analysis/Final_reports.pickle', 'wb') as handle:
+        with open('Plots&analysis/Final_reports_test.pickle', 'wb') as handle:
             pickle.dump(reports, handle, protocol=pickle.HIGHEST_PROTOCOL)
         handle.close()
 
