@@ -35,18 +35,18 @@ ScenarioCreation:
     #NB se voglio mettere storages nelle BCT devo usare i nomi che avranno nella grid finale quindi gli stessi delle connessioni li sopra
     #per ora solo su rete di trasporto
     0: 'transp_8'
-    1: 'transp_5'
-    2: 'transp_2'
+    1: 'transp_3'
+    2: 'transp_6'
 
 
   sto_schedule:
     transp_8:
       charge: !!python/tuple [0,4]
       discharge: !!python/tuple [5,7]
-    transp_5:
+    transp_3:
       charge: !!python/tuple [0,4]
       discharge: !!python/tuple [5,7]
-    transp_2:
+    transp_6:
       charge: !!python/tuple [0,4]
       discharge: !!python/tuple [5,7]
 
@@ -102,7 +102,7 @@ properties:
     T_init_transp : 400.1500
 
 #simulation
-START: '2013-05-11T12:00:00.970460' #utc format or arrow getable format
+START: '2013-05-11T05:00:00.970460' #'2013-05-11T12:00:00.970460'   #utc format or arrow getable format
 END: '2013-05-11T21:23:58.970460' #utc format or arrow getable format
 TS_SIZE: 60    #in seconds 300
 DURATION: 2156 #2156  # 432 in number of timesteps
