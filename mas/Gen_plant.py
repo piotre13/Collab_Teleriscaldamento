@@ -73,6 +73,9 @@ class GenerationPlant_test(aiomas.Agent):
         futs = [sto.get_G() for sto_n, sto in self.storages_proxy.items()]
         G_sto = await asyncio.gather(*futs)
         G = - (sum([x[1] for x in G_subs]) + sum([y[1] for y in G_sto]))
+        if G > 0:
+            ts = int(self.container.clock.time() / self.ts_size)
+            print('too few Deamnd too much storage flow at time : %s' %ts)
         return G
 
     @aiomas.expose

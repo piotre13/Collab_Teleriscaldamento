@@ -60,14 +60,14 @@ class Storage(aiomas.Agent):
 
         # todo will use the config for schedule and
         if self.time_in_range(self.ch_start, self.ch_end, datetime_now.time()):
-            self.state = 'charging'
-            #self.state= None
+            #self.state = 'charging'
+            self.state= None
             # self.G = - 30
             # self.T_Storage = np.mean(self.T_Storage_dis)
 
         elif self.time_in_range(self.dis_start, self.dis_end, datetime_now.time()):
-            self.state = 'discharging'
-            #self.state = None
+            #self.state = 'discharging'
+            self.state = None
             # self.G = 60
             # self.T_Storage = np.mean(self.T_Storage_ch)
 
@@ -98,7 +98,7 @@ class Storage(aiomas.Agent):
         elif dir == 'ritorno':
             if self.state == 'charging':
                 if self.T_dis == None:
-                    return (self.name, 300.1500)
+                    return (self.name, 318.1500)
                 else:
                     return (self.name, self.T_dis)
             else:

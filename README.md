@@ -1,3 +1,9 @@
+##possible upgrades
+1. check automatico che le portate di accumulo in discarica non completino al 100% la domanda in modo che la portate di generazione non vada in negativo oppure trovare un modo per cambiare i versi
+2. trovare il modo per gestire le portate di storage dinamicamente ossia : se scaricando secondo schedule ho dei momenti in cui copro più della domanda non tiro fuori tutto ma tiro fuori di meno e allunco il tempo di schedule
+##problems
+1. storages not working properly maybe Incidence matrices must change when active
+2. G (vettore portate nelle branches per gli storgae quando sono in carica scarico viene sbagliato perchè matrice di incidenza è al contrario, va modificata)
 ## Annotations
 1. when creating the graph must be change the way to assign attributes, for now I'm only adding attributes to nodes and not to the graph thus methods like *nx.get_node_attribute() DO NOT WORK!*
 2. initialization for first fixed values is done inside agents thus in the DHGrid the worflow is standardized it only get and set values and steps the simulators every time

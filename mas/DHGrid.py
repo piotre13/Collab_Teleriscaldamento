@@ -9,7 +9,7 @@ Matrix calculation smust be parallelized by dividing them in portions that are c
 import aiomas
 import asyncio
 from Utils import *
-from models.DHGrid_model import create_matrices, eq_continuità, create_Gvect, calc_temperatures, imm_extr_nodes
+from models.DHGrid_model import create_matrices, eq_continuità, create_Gvect, calc_temperatures, imm_extr_nodes, refine_Ix, graph_adj_sto
 
 
 class DHGrid(aiomas.Agent):
@@ -79,6 +79,14 @@ class DHGrid(aiomas.Agent):
         #SIMULATION TIME
         ts = int(self.container.clock.time() / self.ts_size) # TIMESTEP OF THE SIMULATION
         #todo initialization of temperatures for calc_temperatures
+        if ts== 120:
+            print('yo')
+        if ts == 723:
+            print('yo2')
+        if ts == 964:
+            print('yo3')
+        if ts == 1024:
+            print('yo3')
         if ts == 0:
             T_man, T_ret = self.initialize()
             self.T['mandata'].append(T_man)
@@ -104,7 +112,8 @@ class DHGrid(aiomas.Agent):
         futs = [sto[0].get_state() for sto_n, sto in self.storages.items() ]
         sto_states = await asyncio.gather(*futs)
         T, param, immissione, estrazione, G, G_ext = self.prepare_inputs(T_coll, G_coll, 'mandata', sto_states)
-        M, K, f = create_matrices(self.transp_data['graph'], G, G_ext, T,
+        graph = graph_adj_sto(self.transp_data['graph'], sto_states)
+        M, K, f = create_matrices(graph, G, G_ext, T,
                         'mandata', param, immissione, estrazione, self.ts_size)
         T_res = calc_temperatures(M, K, f, self.T['mandata'][-1])
         self.T['mandata'].append(T_res)
@@ -120,7 +129,7 @@ class DHGrid(aiomas.Agent):
         #4. calc ritorno transport
         T_coll = await self.gathering_T('ritorno')
         T, param, immissione, estrazione, G, G_ext = self.prepare_inputs(T_coll, G_coll, 'ritorno', sto_states)
-        M, K, f = create_matrices(self.transp_data['graph'], G, G_ext, T,
+        M, K, f = create_matrices(graph, G, G_ext, T,
                               'ritorno', param, immissione, estrazione, self.ts_size)
         T_res = calc_temperatures(M, K, f, self.T['ritorno'][-1])
         self.T['ritorno'].append(T_res)
@@ -170,7 +179,8 @@ class DHGrid(aiomas.Agent):
             #todo check if in scenario creation we count possible storages as immision or extraction
             immissione, estrazione = imm_extr_nodes(G_coll, dir, sto_state )
             G_ext = create_Gvect(G_coll, 'transp', self.transp_data['NN'], sto_state)
-            G = eq_continuità(self.transp_data['Ix'], G_ext)
+            I_x = refine_Ix(self.transp_data['Ix'],sto_state)
+            G = eq_continuità(I_x, G_ext)
             self.G['mandata'].append(G)
             self.G_ext = G_ext
             self.G_t = G

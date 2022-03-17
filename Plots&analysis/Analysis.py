@@ -11,7 +11,7 @@ import datetime as dt
 
 
 
-with open('Final_reports_test.pickle', 'rb') as handle:
+with open('Final_reports_NoStorage.pickle', 'rb') as handle:
     reports = pickle.load(handle)
     #handle.close()
 
@@ -42,7 +42,8 @@ for x in reports['transp']['G_ritorno']:
 G_gen_ret = np.array(G_gen_ret[722:])
 
 P_gen = (G_gen * 4186 * (T_gen - T_gen_ret))*1e-6
-
+plt.plot(P_gen)
+plt.show()
 
 #NB le G sono sulle branchessssss PD
 
@@ -143,7 +144,7 @@ ax1.set_xlabel('time (h)')
 ax1.set_ylabel('T [°K]', color=color,)
 #ax1.plot(T_sub1_transp, color='tab:red', label='T_BCT1_mandata')
 ax1.plot(T_sub1_transp, color=color, label = 'T_BCT_sub119')
-#ax1.plot(T_sub1_transp_ret, color='tab:red', label = 'T_BCT_sub119_ret')
+ax1.plot(T_sub1_transp_ret, color='tab:red', label = 'T_BCT_sub119_ret')
 plt.legend()
 ax1.tick_params(axis='y', labelcolor=color)
 

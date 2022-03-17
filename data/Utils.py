@@ -5,7 +5,7 @@ __email__ = 'pietro.randomazzarino@polito.it'
 '''This module contains useful & standard methods for all the Project'''
 
 import yaml
-
+import pickle
 
 def read_config(key=None):
     stream = open('../config.yaml', 'r')
@@ -15,3 +15,8 @@ def read_config(key=None):
     else:
         return dictionary
 
+def read_scenario(path):
+    with open(path, 'rb') as f:
+        scenario = pickle.load(f)
+        f.close()
+    return scenario

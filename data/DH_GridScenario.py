@@ -67,7 +67,8 @@ class GridScenario(object):
             # create the mapping
             edge = (node1, node2)
             data['lenght'] = data['lenght'] * self.config['Transp_properties']['len_mul']
-            data['D'] = data['D'] * self.config['Transp_properties']['D_mul']
+            #data['D'] = data['D'] * self.config['Transp_properties']['D_mul']
+            data['D'] = 0.30
             mapping[edge] = data
 
         nx.set_edge_attributes(self.graph,'transp', 'group')
@@ -90,6 +91,8 @@ class GridScenario(object):
         # adding storages
         self.add_Storages()
 
+        #self.scenario['transp']['graph'] = self.graph
+
         for group in self.scenario['group_list']:
             Ix, nn, nb, node_list, edge_list = self.get_incidence_matrix(self.scenario[group]['graph'])
             self.scenario[group]['Ix'] = Ix
@@ -109,7 +112,7 @@ class GridScenario(object):
 
 
         #visualizing
-        #self.show_graph()
+        self.show_graph()
 
 
     def incidence2graph(self, mat_data):
@@ -227,24 +230,38 @@ class GridScenario(object):
             if self.graph.nodes[node]['type'] == 'BCT' and self.graph.nodes[node]['group'] == 'transp' :
                 self.graph.nodes[node]['type'] = 'Gen'
                 self.scenario['transp']['graph'].nodes[node]['type']= 'Gen'
+                #hardcoded diameter for generator
+                e = list(self.graph.out_edges(node))[0]
+                self.graph[e[0]][e[1]]['D'] = 0.4
+                self.scenario['transp']['graph'][e[0]][e[1]]['D'] = 0.4
             else:
                 raise ValueError(' The specified connections for generator %s are wrong' % g_n)
                 # TODO  possible random assignment when config connections are wrong
 
 
     def add_Storages (self):
-        #adding storages
-        #NB i nodi possono occupare un nodo libero o un nodo con qualcosa se sono liberi verranno creati come agenti indipendenti
-        #gestiti dalla griglia di appartenenza senno verranno creati dall' agente competente (e.g. centrale, utenza o bct)
-        for s_n, node in self.Sto_conf.items():
-            if self.graph.nodes[node]['type'] == 'free' or self.graph.nodes[node]['type'] == 'inner' :
-                self.graph.nodes[node]['type'] = 'Storage'
-                group = self.graph.nodes[node]['group']
-                self.scenario[group]['graph'].nodes[node]['type']='Storage'
-            else:
-                name = str(node) +'_'+ self.graph.nodes[node]['type']+ '_' +str(s_n)
-                self.graph.nodes[node]['storages'].append(name)
-                group = self.graph.nodes[node]['group']
+        #adding storages # extremely hardcoded
+        #gli storages vengono aggiunti solo a nodi interni aggiungendo un nuovo nodo e una connessione che fa da immissione
+        #add nodes to graph transp and self.graph
+        for id, node in self.Sto_conf.items():
+            self.scenario['transp']['graph'].add_node(node, type = 'Storage', group = 'transp')
+            self.graph.add_node(node, type='Storage', group='transp')
+        #add edge
+        for start, end in self.config['sto_conn'].items():
+            nb = 201
+            self.scenario['transp']['graph'].add_edge(start, end, lenght=1.0, D= 0.35, group = 'transp', NB=nb )
+            self.graph.add_edge(start, end, lenght=1.0, D= 0.35, group = 'transp', NB=nb )
+
+            nb+=1
+        # for s_n, node in self.Sto_conf.items():
+        #     if self.graph.nodes[node]['type'] == 'free' or self.graph.nodes[node]['type'] == 'inner' :
+        #         self.graph.nodes[node]['type'] = 'Storage'
+        #         group = self.graph.nodes[node]['group']
+        #         self.scenario[group]['graph'].nodes[node]['type']='Storage'
+        #     else:
+        #         name = str(node) +'_'+ self.graph.nodes[node]['type']+ '_' +str(s_n)
+        #         self.graph.nodes[node]['storages'].append(name)
+        #         group = self.graph.nodes[node]['group']
                 #self.scenario[group]['graph'].nodes[node]['storages'].append(name)
 
 

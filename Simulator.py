@@ -252,7 +252,7 @@ class Simulator(object):
     def save_reports(self, reports):
         '''reports is a list for each grid created that contains all reporting data...
         this function saves the pickle to be used for analysis'''
-        with open('Plots&analysis/Final_reports_test.pickle', 'wb') as handle:
+        with open('Plots&analysis/Final_reports_NoStorage.pickle', 'wb') as handle:
             pickle.dump(reports, handle, protocol=pickle.HIGHEST_PROTOCOL)
         handle.close()
 

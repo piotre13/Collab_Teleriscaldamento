@@ -12,6 +12,32 @@ from scipy.sparse import linalg as lng
 
 
 
+def graph_adj_sto(graph, sto_state):
+    g = graph.copy()
+    for state in sto_state:
+        if state[1] == 'charging':
+            node_n = state[0]
+            out_edges = list(graph.out_edges(node_n))
+            #need to reverse the branch that goes outside the storage nodes
+            for ed in out_edges:
+                attrs = g[ed[0]][ed[1]]
+                g.remove_edge(*ed)
+                g.add_edge(ed[1], ed[0], **attrs)
+    return g
+
+
+
+
+def refine_Ix(Ix, sto_state):
+    I = Ix.copy()
+    for el in sto_state:
+        if el[1]=='charging':
+            id = int(el[0].split('_')[-1])
+            col = np.where(I[id]!=0)[0]
+            I[:, col] = I[:, col]*-1
+    return I
+
+
 def imm_extr_nodes (G_coll, dir, sto_state):
     immissione = []
     estrazione = []
@@ -89,7 +115,7 @@ def create_matrices(graph, G, G_ext, T, dir, param, immissione, estrazione, ts_s
             mapping[node] = int(node.split('_')[-1])  # creating the mapping for relabelling
         graph = nx.relabel_nodes(graph, mapping)
     elif dir == 'ritorno':
-        graph = graph.reverse()
+        graph = graph.copy().reverse()
         mapping={}
         for node in  graph.nodes():
             mapping[node] = int(node.split('_')[-1])  # creating the mapping for relabelling
